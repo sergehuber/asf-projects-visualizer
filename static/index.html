@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apache Projects Visualizer</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        #query {
+            width: 300px;
+            padding: 5px;
+        }
+        #visualization {
+            width: 100%;
+            height: 800px;
+            border: 1px solid #ccc;
+            overflow: hidden;
+        }
+        .node {
+            cursor: pointer;
+        }
+        .node circle {
+            fill: #fff;
+            stroke: steelblue;
+            stroke-width: 1.5px;
+        }
+        .node image {
+            pointer-events: none;
+        }
+        .category {
+            fill: #f0f0f0;
+            stroke: #333;
+            stroke-width: 1px;
+        }
+        .category-label {
+            font-weight: bold;
+            font-size: 12px;
+            text-anchor: middle;
+        }
+        .tooltip {
+            position: absolute;
+            background-color: white;
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 5px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        #project-details {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: white;
+            border: 1px solid #ddd;
+            padding: 20px;
+            border-radius: 5px;
+            max-width: 80%;
+            max-height: 80%;
+            overflow-y: auto;
+            display: none;
+        }
+        #project-details h2 {
+            margin-top: 0;
+        }
+        #close-details {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            cursor: pointer;
+        }
+        #loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            display: none;
+        }
+        #total-projects {
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        .node text {
+            font-size: 12px;
+        }
+        .link {
+            stroke: #999;
+            stroke-opacity: 0.6;
+        }
+    </style>
+</head>
+<body>
+    <h1>Apache Projects Visualizer</h1>
+    <div id="total-projects"></div>
+    <div id="controls">
+        <input type="text" id="query" placeholder="Enter your query...">
+        <button onclick="filterProjects()">Filter Projects</button>
+        <button onclick="clearFilters()">Clear Filters</button>
+    </div>
+    <div id="visualization"></div>
+    <div id="project-details">
+        <span id="close-details" onclick="closeProjectDetails()">×</span>
+        <div id="project-details-content"></div>
+    </div>
+    <div id="loading">Loading projects...</div>
+
+    <script>
+        let projectsData = [];
+        let svg, zoom;
+
+        // Show loading indicator
+        document.getElementById('loading').style.display = 'block';
+
+        // Fetch projects data
+        fetch('/api/projects')
+            .then(response => response.json())
+            .then(data => {
+                projectsData = data.categories;
+                document.getElementById('total-projects').textContent = `Total Projects: ${data.total_projects}`;
+                createVisualization(projectsData);
+                // Hide loading indicator
+                document.getElementById('loading').style.display = 'none';
+            })
+            .catch(error => {
+                console.error('Error fetching projects:', error);
+                // Hide loading indicator and show error message
+                document.getElementById('loading').style.display = 'none';
+                alert('Error loading projects. Please try again later.');
+            });
+
+        function createVisualization(data) {
+            const width = document.getElementById('visualization').clientWidth;
+            const height = 800;
+            const padding = 5;
+            const minProjectSize = 30;
+            const maxProjectSize = 60;
+
+            d3.select("#visualization").selectAll("*").remove();
+
+            svg = d3.select("#visualization")
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height);
+
+            const g = svg.append("g");
+
+            // Calculate total number of projects
+            const totalProjects = data.reduce((sum, category) => sum + category.projects.length, 0);
+
+            // Calculate category sizes
+            let yOffset = padding;
+            data.forEach(category => {
+                const categoryRatio = category.projects.length / totalProjects;
+                category.height = Math.max(100, categoryRatio * height);
+                category.y = yOffset;
+                yOffset += category.height + padding;
+            });
+
+            // Adjust svg height if necessary
+            if (yOffset > height) {
+                svg.attr("height", yOffset);
+            }
+
+            // Draw categories and projects
+            data.forEach(category => {
+                const categoryG = g.append("g")
+                    .attr("transform", `translate(0, ${category.y})`);
+
+                // Draw category rectangle
+                categoryG.append("rect")
+                    .attr("class", "category")
+                    .attr("x", padding)
+                    .attr("y", 0)
+                    .attr("width", width - 2 * padding)
+                    .attr("height", category.height)
+                    .attr("rx", 5)
+                    .attr("ry", 5);
+
+                // Add category label
+                categoryG.append("text")
+                    .attr("class", "category-label")
+                    .attr("x", width / 2)
+                    .attr("y", 20)
+                    .text(category.name);
+
+                // Calculate project size and layout
+                const projectsPerRow = Math.floor((width - 2 * padding) / minProjectSize);
+                const projectSize = Math.min(maxProjectSize, Math.floor((width - 2 * padding) / projectsPerRow));
+                const projectsPerColumn = Math.floor((category.height - 30) / projectSize);
+                const totalSlots = projectsPerRow * projectsPerColumn;
+
+                // Add projects
+                category.projects.forEach((project, index) => {
+                    if (index >= totalSlots) return; // Skip if no more space
+
+                    const row = Math.floor(index / projectsPerRow);
+                    const col = index % projectsPerRow;
+
+                    const projectG = categoryG.append("g")
+                        .attr("class", "node")
+                        .attr("transform", `translate(${padding + col * projectSize + projectSize / 2}, ${30 + row * projectSize + projectSize / 2})`)
+                        .on("click", (event) => showProjectDetails(event, project))
+                        .on("mouseover", (event) => showTooltip(event, project))
+                        .on("mouseout", hideTooltip);
+
+                    projectG.append("circle")
+                        .attr("r", projectSize / 2 - 2)
+                        .attr("fill", "#fff")
+                        .attr("stroke", "steelblue")
+                        .attr("stroke-width", 1.5);
+
+                    projectG.append("image")
+                        .attr("xlink:href", project.logo || "https://www.apache.org/foundation/press/kit/feather.png")
+                        .attr("x", -projectSize / 2 + 2)
+                        .attr("y", -projectSize / 2 + 2)
+                        .attr("width", projectSize - 4)
+                        .attr("height", projectSize - 4)
+                        .attr("clip-path", `circle(${projectSize / 2 - 2}px at center)`);
+                });
+            });
+
+            // Add zoom behavior
+            zoom = d3.zoom()
+                .scaleExtent([0.1, 10])
+                .on("zoom", (event) => g.attr("transform", event.transform));
+
+            svg.call(zoom);
+        }
+
+        function createFilteredVisualization(data) {
+            const width = document.getElementById('visualization').clientWidth;
+            const height = 600;
+
+            d3.select("#visualization").selectAll("*").remove();
+
+            svg = d3.select("#visualization")
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height);
+
+            const g = svg.append("g");
+
+            // Create force simulation
+            const simulation = d3.forceSimulation(data.graph.nodes)
+                .force("link", d3.forceLink(data.graph.links).id(d => d.id))
+                .force("charge", d3.forceManyBody())
+                .force("center", d3.forceCenter(width / 2, height / 2));
+
+            // Add links
+            const link = g.append("g")
+                .attr("class", "links")
+                .selectAll("line")
+                .data(data.graph.links)
+                .enter().append("line")
+                .attr("class", "link");
+
+            // Add nodes
+            const node = g.append("g")
+                .attr("class", "nodes")
+                .selectAll("g")
+                .data(data.graph.nodes)
+                .enter().append("g")
+                .call(d3.drag()
+                    .on("start", dragstarted)
+                    .on("drag", dragged)
+                    .on("end", dragended));
+
+            node.append("circle")
+                .attr("r", 5)
+                .attr("fill", "steelblue");
+
+            node.append("text")
+                .attr("dx", 12)
+                .attr("dy", ".35em")
+                .text(d => d.id);
+
+            node.append("title")
+                .text(d => {
+                    const project = data.projects.find(p => p.name === d.id);
+                    return project ? project.filter_explanation : '';
+                });
+
+            // Update positions
+            simulation.on("tick", () => {
+                link
+                    .attr("x1", d => d.source.x)
+                    .attr("y1", d => d.source.y)
+                    .attr("x2", d => d.target.x)
+                    .attr("y2", d => d.target.y);
+
+                node
+                    .attr("transform", d => `translate(${d.x},${d.y})`);
+            });
+
+            // Add zoom behavior
+            zoom = d3.zoom()
+                .scaleExtent([0.1, 10])
+                .on("zoom", (event) => g.attr("transform", event.transform));
+
+            svg.call(zoom);
+
+            function dragstarted(event) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                event.subject.fx = event.subject.x;
+                event.subject.fy = event.subject.y;
+            }
+
+            function dragged(event) {
+                event.subject.fx = event.x;
+                event.subject.fy = event.y;
+            }
+
+            function dragended(event) {
+                if (!event.active) simulation.alphaTarget(0);
+                event.subject.fx = null;
+                event.subject.fy = null;
+            }
+        }
+
+        function showTooltip(event, d) {
+            const tooltip = d3.select("body").append("div")
+                .attr("class", "tooltip")
+                .style("left", (event.pageX + 10) + "px")
+                .style("top", (event.pageY - 10) + "px");
+
+            tooltip.html(`
+                <strong>${d.name}</strong><br>
+                Category: ${d.category}<br>
+                ${d.shortdesc}
+            `);
+
+            tooltip.transition()
+                .duration(200)
+                .style("opacity", .9);
+        }
+
+        function hideTooltip() {
+            d3.select(".tooltip").remove();
+        }
+
+        function showProjectDetails(event, d) {
+            const detailsDiv = document.getElementById("project-details");
+            const contentDiv = document.getElementById("project-details-content");
+            
+            let content = `
+                <h2>${d.name}</h2>
+                <p><strong>Category:</strong> ${d.category}</p>
+                <p><strong>Programming Language:</strong> ${d.programming_language}</p>
+                <p><strong>Short Description:</strong> ${d.shortdesc}</p>
+                <p><strong>Description:</strong> ${d.description}</p>
+                <p><strong>Homepage:</strong> <a href="${d.homepage}" target="_blank">${d.homepage}</a></p>
+            `;
+
+            if (d.download_page) {
+                content += `<p><strong>Download Page:</strong> <a href="${d.download_page}" target="_blank">${d.download_page}</a></p>`;
+            }
+
+            if (d.bug_database) {
+                content += `<p><strong>Bug Database:</strong> <a href="${d.bug_database}" target="_blank">${d.bug_database}</a></p>`;
+            }
+
+            if (d.mailing_list) {
+                content += `<p><strong>Mailing List:</strong> <a href="${d.mailing_list}" target="_blank">${d.mailing_list}</a></p>`;
+            }
+
+            if (d.filter_explanation) {
+                content += `<p><strong>Why this project was included:</strong> ${d.filter_explanation}</p>`;
+            }
+
+            contentDiv.innerHTML = content;
+            detailsDiv.style.display = "block";
+        }
+
+        function closeProjectDetails() {
+            document.getElementById("project-details").style.display = "none";
+        }
+
+        function filterProjects() {
+            // Show loading indicator
+            document.getElementById('loading').style.display = 'block';
+
+            const query = document.getElementById('query').value;
+            fetch(`/api/filter?query=${encodeURIComponent(query)}`)
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('total-projects').textContent = `Filtered Projects: ${data.total_projects}`;
+                    createFilteredVisualization(data);
+                    // Hide loading indicator
+                    document.getElementById('loading').style.display = 'none';
+                })
+                .catch(error => {
+                    console.error('Error filtering projects:', error);
+                    // Hide loading indicator and show error message
+                    document.getElementById('loading').style.display = 'none';
+                    alert('Error filtering projects. Please try again.');
+                });
+        }
+
+        function clearFilters() {
+            document.getElementById('query').value = '';
+            document.getElementById('total-projects').textContent = `Total Projects: ${projectsData.reduce((sum, category) => sum + category.projects.length, 0)}`;
+            createVisualization(projectsData);
+        }
+
+        // Add event listener for Enter key
+        document.getElementById('query').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                filterProjects();
+            }
+        });
+    </script>
+</body>
+</html>
