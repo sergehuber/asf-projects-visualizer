@@ -66,6 +66,7 @@ def filter_projects():
                 "\"relationships\": [{\"source\": \"project1\", \"target\": \"project2\", "
                 "\"description\": \"relationship_description\"}], "
                 "\"stack\": [\"project1\", \"project2\", ...]}"
+                "Do not include any text before or after the JSON content."
             )},
             {"role": "user", "content": (
                 f"Given the query: '{query}', what Apache projects would "
@@ -78,14 +79,22 @@ def filter_projects():
     )
     
     try:
-        ai_response = json.loads(response.choices[0].message.content)
+        # Extract JSON content from the response
+        content = response.choices[0].message.content
+        json_match = re.search(r'\{.*\}', content, re.DOTALL)
+        if json_match:
+            json_content = json_match.group(0)
+            ai_response = json.loads(json_content)
+        else:
+            raise ValueError("No JSON content found in the response")
+
         relevant_projects = ai_response.get('projects', {})
         relationships = ai_response.get('relationships', [])
         stack = ai_response.get('stack', [])
-    except json.JSONDecodeError:
-        print("Error decoding JSON from OpenAI response. Using fallback method.")
-        print("Error decoding JSON from OpenAI response. Raw response:")
-        print(response.choices[0].message.content)
+    except (json.JSONDecodeError, ValueError) as e:
+        print(f"Error parsing JSON from OpenAI response: {str(e)}")
+        print("Raw response:")
+        print(content)
         relevant_projects = {}
         relationships = []
         stack = []
