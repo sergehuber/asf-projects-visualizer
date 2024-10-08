@@ -33,32 +33,16 @@
             cursor: pointer;
         }
         .node circle {
-            fill: #fff;
-            stroke: steelblue;
+            stroke: #fff;
             stroke-width: 1.5px;
         }
-        .node image {
-            pointer-events: none;
-        }
-        .category {
-            fill: #f0f0f0;
-            stroke: #333;
-            stroke-width: 1px;
-        }
-        .category-label {
+        .node text {
+            font-size: 10px;
             font-weight: bold;
-            font-size: 12px;
-            text-anchor: middle;
         }
-        .tooltip {
-            position: absolute;
-            background-color: white;
-            border: 1px solid #ddd;
-            padding: 10px;
-            border-radius: 5px;
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 0.3s;
+        .link {
+            stroke: #999;
+            stroke-opacity: 0.6;
         }
         #project-details {
             position: fixed;
@@ -73,9 +57,7 @@
             max-height: 80%;
             overflow-y: auto;
             display: none;
-        }
-        #project-details h2 {
-            margin-top: 0;
+            z-index: 1000;
         }
         #close-details {
             position: absolute;
@@ -93,17 +75,11 @@
             padding: 20px;
             border-radius: 10px;
             display: none;
+            z-index: 1000;
         }
         #total-projects {
             font-size: 18px;
             margin-bottom: 10px;
-        }
-        .node text {
-            font-size: 12px;
-        }
-        .link {
-            stroke: #999;
-            stroke-opacity: 0.6;
         }
     </style>
 </head>
@@ -124,7 +100,7 @@
 
     <script>
         let projectsData = [];
-        let svg, zoom;
+        let svg, zoom, simulation;
 
         // Show loading indicator
         document.getElementById('loading').style.display = 'block';
@@ -149,9 +125,6 @@
         function createVisualization(data) {
             const width = document.getElementById('visualization').clientWidth;
             const height = 800;
-            const padding = 5;
-            const minProjectSize = 30;
-            const maxProjectSize = 60;
 
             d3.select("#visualization").selectAll("*").remove();
 
@@ -162,113 +135,34 @@
 
             const g = svg.append("g");
 
-            // Calculate total number of projects
-            const totalProjects = data.reduce((sum, category) => sum + category.projects.length, 0);
+            // Prepare data for force-directed graph
+            const nodes = [];
+            const links = [];
 
-            // Calculate category sizes
-            let yOffset = padding;
             data.forEach(category => {
-                const categoryRatio = category.projects.length / totalProjects;
-                category.height = Math.max(100, categoryRatio * height);
-                category.y = yOffset;
-                yOffset += category.height + padding;
-            });
+                // Add category node
+                nodes.push({ id: category.name, group: "category", size: 30 });
 
-            // Adjust svg height if necessary
-            if (yOffset > height) {
-                svg.attr("height", yOffset);
-            }
-
-            // Draw categories and projects
-            data.forEach(category => {
-                const categoryG = g.append("g")
-                    .attr("transform", `translate(0, ${category.y})`);
-
-                // Draw category rectangle
-                categoryG.append("rect")
-                    .attr("class", "category")
-                    .attr("x", padding)
-                    .attr("y", 0)
-                    .attr("width", width - 2 * padding)
-                    .attr("height", category.height)
-                    .attr("rx", 5)
-                    .attr("ry", 5);
-
-                // Add category label
-                categoryG.append("text")
-                    .attr("class", "category-label")
-                    .attr("x", width / 2)
-                    .attr("y", 20)
-                    .text(category.name);
-
-                // Calculate project size and layout
-                const projectsPerRow = Math.floor((width - 2 * padding) / minProjectSize);
-                const projectSize = Math.min(maxProjectSize, Math.floor((width - 2 * padding) / projectsPerRow));
-                const projectsPerColumn = Math.floor((category.height - 30) / projectSize);
-                const totalSlots = projectsPerRow * projectsPerColumn;
-
-                // Add projects
-                category.projects.forEach((project, index) => {
-                    if (index >= totalSlots) return; // Skip if no more space
-
-                    const row = Math.floor(index / projectsPerRow);
-                    const col = index % projectsPerRow;
-
-                    const projectG = categoryG.append("g")
-                        .attr("class", "node")
-                        .attr("transform", `translate(${padding + col * projectSize + projectSize / 2}, ${30 + row * projectSize + projectSize / 2})`)
-                        .on("click", (event) => showProjectDetails(event, project))
-                        .on("mouseover", (event) => showTooltip(event, project))
-                        .on("mouseout", hideTooltip);
-
-                    projectG.append("circle")
-                        .attr("r", projectSize / 2 - 2)
-                        .attr("fill", "#fff")
-                        .attr("stroke", "steelblue")
-                        .attr("stroke-width", 1.5);
-
-                    projectG.append("image")
-                        .attr("xlink:href", project.logo || "https://www.apache.org/foundation/press/kit/feather.png")
-                        .attr("x", -projectSize / 2 + 2)
-                        .attr("y", -projectSize / 2 + 2)
-                        .attr("width", projectSize - 4)
-                        .attr("height", projectSize - 4)
-                        .attr("clip-path", `circle(${projectSize / 2 - 2}px at center)`);
+                category.projects.forEach(project => {
+                    // Add project node
+                    nodes.push({ id: project.name, group: "project", category: category.name, size: 20, data: project });
+                    // Add link between project and category
+                    links.push({ source: project.name, target: category.name });
                 });
             });
 
-            // Add zoom behavior
-            zoom = d3.zoom()
-                .scaleExtent([0.1, 10])
-                .on("zoom", (event) => g.attr("transform", event.transform));
-
-            svg.call(zoom);
-        }
-
-        function createFilteredVisualization(data) {
-            const width = document.getElementById('visualization').clientWidth;
-            const height = 600;
-
-            d3.select("#visualization").selectAll("*").remove();
-
-            svg = d3.select("#visualization")
-                .append("svg")
-                .attr("width", width)
-                .attr("height", height);
-
-            const g = svg.append("g");
-
             // Create force simulation
-            const simulation = d3.forceSimulation(data.graph.nodes)
-                .force("link", d3.forceLink(data.graph.links).id(d => d.id))
-                .force("charge", d3.forceManyBody())
-                .force("center", d3.forceCenter(width / 2, height / 2));
+            simulation = d3.forceSimulation(nodes)
+                .force("link", d3.forceLink(links).id(d => d.id).distance(100))
+                .force("charge", d3.forceManyBody().strength(-300))
+                .force("center", d3.forceCenter(width / 2, height / 2))
+                .force("collision", d3.forceCollide().radius(d => d.size + 10));
 
             // Add links
             const link = g.append("g")
                 .attr("class", "links")
                 .selectAll("line")
-                .data(data.graph.links)
+                .data(links)
                 .enter().append("line")
                 .attr("class", "link");
 
@@ -276,27 +170,45 @@
             const node = g.append("g")
                 .attr("class", "nodes")
                 .selectAll("g")
-                .data(data.graph.nodes)
+                .data(nodes)
                 .enter().append("g")
+                .attr("class", "node")
                 .call(d3.drag()
                     .on("start", dragstarted)
                     .on("drag", dragged)
                     .on("end", dragended));
 
             node.append("circle")
-                .attr("r", 5)
-                .attr("fill", "steelblue");
+                .attr("r", d => d.size)
+                .attr("fill", d => d.group === "category" ? "#ff9999" : "#66b3ff");
 
-            node.append("text")
-                .attr("dx", 12)
-                .attr("dy", ".35em")
-                .text(d => d.id);
+            // Add project logos
+            node.filter(d => d.group === "project")
+                .append("image")
+                .attr("xlink:href", d => d.data.logo || "https://www.apache.org/foundation/press/kit/feather.png")
+                .attr("x", d => -d.size)
+                .attr("y", d => -d.size)
+                .attr("width", d => d.size * 2)
+                .attr("height", d => d.size * 2)
+                .attr("clip-path", d => `circle(${d.size}px at ${d.size}px ${d.size}px)`);
 
             node.append("title")
-                .text(d => {
-                    const project = data.projects.find(p => p.name === d.id);
-                    return project ? project.filter_explanation : '';
-                });
+                .text(d => d.id);
+
+            node.filter(d => d.group === "category")
+                .append("text")
+                .attr("dy", 35)
+                .attr("text-anchor", "middle")
+                .text(d => d.id)
+                .style("fill", "#000")
+                .style("font-weight", "bold")
+                .style("font-size", "12px");
+
+            node.on("click", (event, d) => {
+                if (d.group === "project") {
+                    showProjectDetails(event, d.data);
+                }
+            });
 
             // Update positions
             simulation.on("tick", () => {
@@ -312,48 +224,101 @@
 
             // Add zoom behavior
             zoom = d3.zoom()
-                .scaleExtent([0.1, 10])
+                .scaleExtent([0.1, 2])
                 .on("zoom", (event) => g.attr("transform", event.transform));
 
             svg.call(zoom);
 
-            function dragstarted(event) {
-                if (!event.active) simulation.alphaTarget(0.3).restart();
-                event.subject.fx = event.subject.x;
-                event.subject.fy = event.subject.y;
-            }
-
-            function dragged(event) {
-                event.subject.fx = event.x;
-                event.subject.fy = event.y;
-            }
-
-            function dragended(event) {
-                if (!event.active) simulation.alphaTarget(0);
-                event.subject.fx = null;
-                event.subject.fy = null;
-            }
+            // Initial zoom to fit all nodes
+            const bounds = g.node().getBBox();
+            const fullWidth = bounds.width;
+            const fullHeight = bounds.height;
+            const scale = Math.min(width / fullWidth, height / fullHeight) * 0.9;
+            const translateX = (width - fullWidth * scale) / 2;
+            const translateY = (height - fullHeight * scale) / 2;
+            svg.call(zoom.transform, d3.zoomIdentity.translate(translateX, translateY).scale(scale));
         }
 
-        function showTooltip(event, d) {
-            const tooltip = d3.select("body").append("div")
-                .attr("class", "tooltip")
-                .style("left", (event.pageX + 10) + "px")
-                .style("top", (event.pageY - 10) + "px");
+        function createFilteredVisualization(data) {
+            const width = document.getElementById('visualization').clientWidth;
+            const height = 800;
 
-            tooltip.html(`
-                <strong>${d.name}</strong><br>
-                Category: ${d.category}<br>
-                ${d.shortdesc}
-            `);
+            d3.select("#visualization").selectAll("*").remove();
 
-            tooltip.transition()
-                .duration(200)
-                .style("opacity", .9);
-        }
+            svg = d3.select("#visualization")
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height);
 
-        function hideTooltip() {
-            d3.select(".tooltip").remove();
+            const g = svg.append("g");
+
+            // Prepare data for force-directed graph
+            const nodes = data.projects.map(project => ({
+                id: project.name,
+                group: "project",
+                size: 30,
+                data: project
+            }));
+
+            // Create force simulation
+            simulation = d3.forceSimulation(nodes)
+                .force("charge", d3.forceManyBody().strength(-500))
+                .force("center", d3.forceCenter(width / 2, height / 2))
+                .force("collision", d3.forceCollide().radius(d => d.size + 10));
+
+            // Add nodes
+            const node = g.append("g")
+                .attr("class", "nodes")
+                .selectAll("g")
+                .data(nodes)
+                .enter().append("g")
+                .attr("class", "node")
+                .call(d3.drag()
+                    .on("start", dragstarted)
+                    .on("drag", dragged)
+                    .on("end", dragended));
+
+            node.append("circle")
+                .attr("r", d => d.size)
+                .attr("fill", "#66b3ff");
+
+            // Add project logos
+            node.append("image")
+                .attr("xlink:href", d => d.data.logo || "https://www.apache.org/foundation/press/kit/feather.png")
+                .attr("x", d => -d.size)
+                .attr("y", d => -d.size)
+                .attr("width", d => d.size * 2)
+                .attr("height", d => d.size * 2)
+                .attr("clip-path", d => `circle(${d.size}px at ${d.size}px ${d.size}px)`);
+
+            node.append("title")
+                .text(d => `${d.id}\n\n${d.data.filter_explanation}`);
+
+            node.on("click", (event, d) => {
+                showProjectDetails(event, d.data);
+            });
+
+            // Update positions
+            simulation.on("tick", () => {
+                node
+                    .attr("transform", d => `translate(${d.x},${d.y})`);
+            });
+
+            // Add zoom behavior
+            zoom = d3.zoom()
+                .scaleExtent([0.1, 2])
+                .on("zoom", (event) => g.attr("transform", event.transform));
+
+            svg.call(zoom);
+
+            // Initial zoom to fit all nodes
+            const bounds = g.node().getBBox();
+            const fullWidth = bounds.width;
+            const fullHeight = bounds.height;
+            const scale = Math.min(width / fullWidth, height / fullHeight) * 0.9;
+            const translateX = (width - fullWidth * scale) / 2;
+            const translateY = (height - fullHeight * scale) / 2;
+            svg.call(zoom.transform, d3.zoomIdentity.translate(translateX, translateY).scale(scale));
         }
 
         function showProjectDetails(event, d) {
@@ -426,6 +391,23 @@
                 filterProjects();
             }
         });
+
+        function dragstarted(event) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            event.subject.fx = event.subject.x;
+            event.subject.fy = event.subject.y;
+        }
+
+        function dragged(event) {
+            event.subject.fx = event.x;
+            event.subject.fy = event.y;
+        }
+
+        function dragended(event) {
+            if (!event.active) simulation.alphaTarget(0);
+            event.subject.fx = null;
+            event.subject.fy = null;
+        }
     </script>
 </body>
 </html>

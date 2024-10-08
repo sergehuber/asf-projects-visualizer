@@ -7,7 +7,7 @@ import re
 import networkx as nx
 
 app = Flask(__name__, static_folder='../static')
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Load Apache project data
 with open('apache_projects.json', 'r') as f:
