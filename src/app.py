@@ -62,7 +62,7 @@ def filter_projects():
                 "describe relationships between the projects and suggest "
                 "a possible stack of projects. Provide your response in JSON format "
                 "with the following structure: "
-                "{\"projects\": {\"project_name\": \"explanation\"}, "
+                "{\"projects\": {\"project_name\": {\"explanation\": \"...\", \"role\": \"...\"}}, "
                 "\"relationships\": [{\"source\": \"project1\", \"target\": \"project2\", "
                 "\"description\": \"relationship_description\"}], "
                 "\"stack\": [\"project1\", \"project2\", ...]}"
@@ -72,14 +72,13 @@ def filter_projects():
                 "be most relevant, how are they related to each other, and "
                 "what would be a possible stack of these projects? Please provide "
                 "the project names, brief explanations for why each project is relevant, "
-                "relationships between the projects, and a suggested stack."
+                "its role in the stack, relationships between the projects, and a suggested stack."
             )}
         ]
     )
     
     try:
         ai_response = json.loads(response.choices[0].message.content)
-        print(ai_response)
         relevant_projects = ai_response.get('projects', {})
         relationships = ai_response.get('relationships', [])
         stack = ai_response.get('stack', [])
@@ -91,14 +90,15 @@ def filter_projects():
 
     # Filter and explain projects based on AI response
     filtered_projects = []
-    for project_name, explanation in relevant_projects.items():
+    for project_name, project_info in relevant_projects.items():
         # Use fuzzy matching to find the closest project name
         closest_match, score = process.extractOne(project_name, [p['name'] for p in apache_projects])
         if score >= 80:  # You can adjust this threshold as needed
             project = next((p for p in apache_projects if p['name'] == closest_match), None)
             if project:
                 project_copy = project.copy()
-                project_copy['filter_explanation'] = explanation
+                project_copy['filter_explanation'] = project_info['explanation']
+                project_copy['role'] = project_info['role']
                 project_copy['matched_name'] = project_name  # Store the original AI-provided name
                 filtered_projects.append(project_copy)
 
@@ -111,8 +111,8 @@ def filter_projects():
 
     # Convert the graph to a format suitable for D3.js
     graph_data = {
-        "nodes": [{"id": node} for node in G.nodes()],
-        "links": [{"source": u, "target": v, "description": G[u][v]['description']} for u, v in G.edges()]
+        "nodes": [{"id": node, "group": 1} for node in G.nodes()],
+        "links": [{"source": u, "target": v, "value": 1, "description": G[u][v]['description']} for u, v in G.edges()]
     }
 
     return jsonify({
@@ -121,6 +121,6 @@ def filter_projects():
         'stack': stack,
         'total_projects': len(filtered_projects)
     })
-    
+        
 if __name__ == '__main__':
     app.run(debug=True)

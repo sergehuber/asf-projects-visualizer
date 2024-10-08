@@ -5,32 +5,43 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Apache Projects Visualizer</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
-        .project-box {
-            width: 200px;
-            height: 150px;
-        }
+        .node { stroke: #fff; stroke-width: 1.5px; }
+        .link { stroke: #999; stroke-opacity: 0.6; }
     </style>
 </head>
 <body class="bg-gray-100">
     <div class="container mx-auto px-4 py-8">
-        <h1 class="text-3xl font-bold mb-8 text-gray-800">Apache Projects Visualizer</h1>
+        <h1 id="apache-projects-visualizer" class="text-3xl font-bold mb-8 text-gray-800">Apache Projects Visualizer</h1>
+
         <div class="mb-6">
             <div class="flex space-x-4 mb-4">
-                <input type="text" id="query" placeholder="Enter your query..." class="flex-grow px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <button onclick="filterProjects()" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500">Filter Projects</button>
-                <button onclick="clearFilters()" class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500">Clear Filters</button>
+                <input type="text" id="queryInput" placeholder="Query Projects" class="flex-grow p-2 border rounded">
+                <button id="queryButton" class="bg-blue-500 text-white px-4 py-2 rounded">Query</button>
+                <button id="clearButton" class="bg-gray-300 text-gray-700 px-4 py-2 rounded">Clear</button>
             </div>
-            <div id="categoryToggles" class="flex flex-wrap gap-4 mb-4"></div>
+            <div id="categoryFilters" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-4"></div>
         </div>
-        <div id="visualization" class="flex flex-wrap gap-6"></div>
+
+        <div id="defaultView">
+            <div id="visualization" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div>
+        </div>
+
+        <div id="filteredView" class="hidden">
+            <h2 class="text-2xl font-bold mb-4">Suggested Stack</h2>
+            <div class="flex flex-wrap gap-6">
+                <div id="stackVisualization" class="w-full lg:w-1/2 bg-white p-4 rounded shadow"></div>
+                <div id="filteredProjectList" class="w-full lg:w-1/2 bg-white p-4 rounded shadow overflow-y-auto" style="max-height: 600px;"></div>
+            </div>
+        </div>
     </div>
 
     <div id="projectModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
         <div class="bg-white p-8 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div class="flex justify-between items-center mb-4">
                 <h2 id="modalTitle" class="text-2xl font-bold"></h2>
-                <button onclick="closeModal()" class="text-2xl">&times;</button>
+                <button id="closeModal" class="text-2xl">&times;</button>
             </div>
             <div id="projectDetails"></div>
         </div>
@@ -38,171 +49,246 @@
 
     <div id="loading" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
         <div class="bg-white p-8 rounded-lg">
-            <p class="text-xl">Loading projects...</p>
+            <p>Querying...</p>
         </div>
     </div>
 
     <script>
-        let projectsData = [];
+        const queryInput = document.getElementById('queryInput');
+        const queryButton = document.getElementById('queryButton');
+        const clearButton = document.getElementById('clearButton');
+        const projectModal = document.getElementById('projectModal');
+        const closeModal = document.getElementById('closeModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const projectDetails = document.getElementById('projectDetails');
+        const loading = document.getElementById('loading');
+        const stackVisualization = document.getElementById('stackVisualization');
+        const filteredProjectList = document.getElementById('filteredProjectList');
+        const defaultView = document.getElementById('defaultView');
+        const filteredView = document.getElementById('filteredView');
+        const categoryFilters = document.getElementById('categoryFilters');
 
-        // Fetch projects data
-        fetch('/api/projects')
-            .then(response => response.json())
-            .then(data => {
-                projectsData = data.categories;
-                createVisualization(projectsData);
-                createCategoryToggles(projectsData);
-                document.getElementById('loading').classList.add('hidden');
-            })
-            .catch(error => {
-                console.error('Error fetching projects:', error);
-                document.getElementById('loading').classList.add('hidden');
-            });
+        queryButton.addEventListener('click', queryProjects);
+        clearButton.addEventListener('click', clearQuery);
+        closeModal.addEventListener('click', () => projectModal.classList.add('hidden'));
+        queryInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                queryProjects();
+            }
+        });
 
-        function createVisualization(data) {
-            const visualizationDiv = document.getElementById('visualization');
-            visualizationDiv.innerHTML = '';
+        // Load default projects view
+        loadProjects();
 
-            data.forEach(category => {
-                const categoryDiv = document.createElement('div');
-                categoryDiv.className = 'category mb-8 w-full';
-                categoryDiv.setAttribute('data-name', category.name);
-                
-                const categoryTitle = document.createElement('h2');
-                categoryTitle.className = 'text-xl font-semibold mb-4 text-gray-700';
-                categoryTitle.textContent = category.name;
-                categoryDiv.appendChild(categoryTitle);
-
-                const projectsGrid = document.createElement('div');
-                projectsGrid.className = 'flex flex-wrap gap-6';
-
-                category.projects.forEach(project => {
-                    const projectDiv = createProjectElement(project);
-                    projectsGrid.appendChild(projectDiv);
+        function loadProjects() {
+            loading.classList.remove('hidden');
+            fetch('/api/projects')
+                .then(response => response.json())
+                .then(data => {
+                    renderCategoryFilters(data.categories);
+                    renderProjects(data.categories);
+                    loading.classList.add('hidden');
                 });
+        }
 
-                categoryDiv.appendChild(projectsGrid);
-                visualizationDiv.appendChild(categoryDiv);
+        function renderCategoryFilters(categories) {
+            categoryFilters.innerHTML = '';
+            categories.forEach(category => {
+                const filterDiv = document.createElement('div');
+                filterDiv.className = 'flex items-center';
+                filterDiv.innerHTML = `
+                    <input type="checkbox" id="${category.name}" name="${category.name}" checked class="mr-2">
+                    <label for="${category.name}" class="text-sm">${category.name} (${category.projects.length})</label>
+                `;
+                const checkbox = filterDiv.querySelector('input');
+                checkbox.addEventListener('change', () => toggleCategory(category.name, checkbox.checked));
+                categoryFilters.appendChild(filterDiv);
             });
         }
 
-        function createProjectElement(project) {
-            const projectDiv = document.createElement('div');
-            projectDiv.className = 'project-box bg-white p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 cursor-pointer flex flex-col items-center justify-between';
-
-            const img = document.createElement('img');
-            img.src = project.logo || 'https://www.apache.org/foundation/press/kit/feather.png';
-            img.alt = project.name;
-            img.className = 'w-24 h-24 object-contain mb-4';
-            projectDiv.appendChild(img);
-
-            const nameDiv = document.createElement('div');
-            nameDiv.className = 'text-center text-sm font-medium text-gray-800';
-            nameDiv.textContent = project.name;
-            projectDiv.appendChild(nameDiv);
-
-            projectDiv.addEventListener('click', () => {
-                showProjectDetails(project);
+        function toggleCategory(categoryName, isChecked) {
+            const categoryProjects = document.querySelectorAll(`.project-card[data-category="${categoryName}"]`);
+            categoryProjects.forEach(project => {
+                project.style.display = isChecked ? 'block' : 'none';
             });
+        }
 
-            return projectDiv;
+        function renderProjects(categories) {
+            const visualization = document.getElementById('visualization');
+            visualization.innerHTML = '';
+            categories.forEach(category => {
+                category.projects.forEach(project => {
+                    const projectCard = createProjectCard(project, category.name);
+                    visualization.appendChild(projectCard);
+                });
+            });
+        }
+
+        function createProjectCard(project, categoryName) {
+            const card = document.createElement('div');
+            card.className = 'project-card bg-white p-4 rounded shadow';
+            card.dataset.category = categoryName;
+            card.innerHTML = `
+                <div class="flex items-center mb-2">
+                    <img src="${project.logo || '/api/placeholder/32/32'}" alt="${project.name} logo" class="w-8 h-8 mr-2">
+                    <h3 class="text-lg font-semibold">${project.name}</h3>
+                </div>
+                <p class="text-sm text-gray-600 mb-4">${project.shortdesc}</p>
+                <button class="bg-blue-500 text-white px-2 py-1 rounded text-sm">View Details</button>
+            `;
+            card.querySelector('button').addEventListener('click', () => showProjectDetails(project));
+            return card;
+        }
+
+        function queryProjects() {
+            const query = queryInput.value;
+            if (query) {
+                loading.classList.remove('hidden');
+                fetch(`/api/filter?query=${encodeURIComponent(query)}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        renderStack(data.stack, data.graph);
+                        renderFilteredProjectList(data.projects);
+                        defaultView.classList.add('hidden');
+                        filteredView.classList.remove('hidden');
+                        categoryFilters.classList.add('hidden');
+                        loading.classList.add('hidden');
+                    });
+            }
+        }
+
+        function clearQuery() {
+            queryInput.value = '';
+            defaultView.classList.remove('hidden');
+            filteredView.classList.add('hidden');
+            categoryFilters.classList.remove('hidden');
+            stackVisualization.innerHTML = '';
+            filteredProjectList.innerHTML = '';
+        }
+
+        function renderStack(stack, graph) {
+            stackVisualization.innerHTML = '<h3 class="text-xl font-bold mb-4">Project Stack Visualization</h3>';
+            const width = stackVisualization.clientWidth;
+            const height = 400;
+
+            const svg = d3.select(stackVisualization)
+                .append('svg')
+                .attr('width', width)
+                .attr('height', height);
+
+            const simulation = d3.forceSimulation(graph.nodes)
+                .force('link', d3.forceLink(graph.links).id(d => d.id))
+                .force('charge', d3.forceManyBody().strength(-300))
+                .force('center', d3.forceCenter(width / 2, height / 2));
+
+            const link = svg.append('g')
+                .selectAll('line')
+                .data(graph.links)
+                .enter().append('line')
+                .attr('class', 'link');
+
+            const node = svg.append('g')
+                .selectAll('circle')
+                .data(graph.nodes)
+                .enter().append('circle')
+                .attr('class', 'node')
+                .attr('r', 10)
+                .attr('fill', d => d3.schemeCategory10[d.group % 10])
+                .call(d3.drag()
+                    .on('start', dragstarted)
+                    .on('drag', dragged)
+                    .on('end', dragended));
+
+            node.append('title')
+                .text(d => d.id);
+
+            const label = svg.append('g')
+                .selectAll('text')
+                .data(graph.nodes)
+                .enter().append('text')
+                .attr('dx', 12)
+                .attr('dy', '.35em')
+                .text(d => d.id);
+
+            simulation
+                .nodes(graph.nodes)
+                .on('tick', ticked);
+
+            simulation.force('link')
+                .links(graph.links);
+
+            function ticked() {
+                link
+                    .attr('x1', d => d.source.x)
+                    .attr('y1', d => d.source.y)
+                    .attr('x2', d => d.target.x)
+                    .attr('y2', d => d.target.y);
+
+                node
+                    .attr('cx', d => d.x)
+                    .attr('cy', d => d.y);
+
+                label
+                    .attr('x', d => d.x)
+                    .attr('y', d => d.y);
+            }
+
+            function dragstarted(event) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                event.subject.fx = event.subject.x;
+                event.subject.fy = event.subject.y;
+            }
+
+            function dragged(event) {
+                event.subject.fx = event.x;
+                event.subject.fy = event.y;
+            }
+
+            function dragended(event) {
+                if (!event.active) simulation.alphaTarget(0);
+                event.subject.fx = null;
+                event.subject.fy = null;
+            }
+        }
+
+        function renderFilteredProjectList(projects) {
+            filteredProjectList.innerHTML = '<h3 class="text-xl font-bold mb-4">Filtered Projects</h3>';
+            projects.forEach(project => {
+                const projectCard = document.createElement('div');
+                projectCard.className = 'bg-white shadow rounded p-4 mb-4';
+                projectCard.innerHTML = `
+                    <div class="flex items-center mb-2">
+                        <img src="${project.logo || '/api/placeholder/32/32'}" alt="${project.name} logo" class="w-8 h-8 mr-2">
+                        <h4 class="text-lg font-semibold">${project.name}</h4>
+                    </div>
+                    <p class="text-sm text-gray-600 mb-2">${project.shortdesc}</p>
+                    <p class="text-sm mb-2"><strong>Role:</strong> ${project.role}</p>
+                    <p class="text-sm mb-2"><strong>Reason:</strong> ${project.filter_explanation}</p>
+                    <button class="mt-2 bg-blue-500 text-white px-2 py-1 rounded text-sm">View Details</button>
+                `;
+                projectCard.querySelector('button').addEventListener('click', () => showProjectDetails(project));
+                filteredProjectList.appendChild(projectCard);
+            });
         }
 
         function showProjectDetails(project) {
-            const modal = document.getElementById('projectModal');
-            const detailsDiv = document.getElementById('projectDetails');
-            const modalTitle = document.getElementById('modalTitle');
-            
             modalTitle.textContent = project.name;
-            
-            let content = `
-                <p class="mb-2"><strong>Category:</strong> ${project.category}</p>
-                <p class="mb-2"><strong>Programming Language:</strong> ${project.programming_language || 'N/A'}</p>
-                <p class="mb-2"><strong>Short Description:</strong> ${project.shortdesc}</p>
-                <p class="mb-4"><strong>Description:</strong> ${project.description || 'N/A'}</p>
-                <p class="mb-2"><strong>Homepage:</strong> <a href="${project.homepage}" target="_blank" class="text-blue-500 hover:underline">${project.homepage}</a></p>
+            projectDetails.innerHTML = `
+                <div class="flex items-center mb-4">
+                    <img src="${project.logo || '/api/placeholder/64/64'}" alt="${project.name} logo" class="w-16 h-16 mr-4">
+                    <div>
+                        <p><strong>Category:</strong> ${project.category}</p>
+                        <p><strong>Programming Language:</strong> ${project.programming_language}</p>
+                    </div>
+                </div>
+                <p><strong>Description:</strong> ${project.description || project.shortdesc}</p>
+                ${project.role ? `<p><strong>Role in Stack:</strong> ${project.role}</p>` : ''}
+                ${project.filter_explanation ? `<p><strong>Reason for Selection:</strong> ${project.filter_explanation}</p>` : ''}
+                ${project.homepage ? `<p><strong>Homepage:</strong> <a href="${project.homepage}" target="_blank" class="text-blue-500">${project.homepage}</a></p>` : ''}
+                ${project.download_page ? `<p><strong>Download Page:</strong> <a href="${project.download_page}" target="_blank" class="text-blue-500">${project.download_page}</a></p>` : ''}
             `;
-
-            if (project.download_page) {
-                content += `<p class="mb-2"><strong>Download Page:</strong> <a href="${project.download_page}" target="_blank" class="text-blue-500 hover:underline">${project.download_page}</a></p>`;
-            }
-
-            if (project.bug_database) {
-                content += `<p class="mb-2"><strong>Bug Database:</strong> <a href="${project.bug_database}" target="_blank" class="text-blue-500 hover:underline">${project.bug_database}</a></p>`;
-            }
-
-            if (project.mailing_list) {
-                content += `<p class="mb-2"><strong>Mailing List:</strong> <a href="${project.mailing_list}" target="_blank" class="text-blue-500 hover:underline">${project.mailing_list}</a></p>`;
-            }
-
-            if (project.filter_explanation) {
-                content += `<p class="mt-4"><strong>Why this project was included:</strong> ${project.filter_explanation}</p>`;
-            }
-
-            detailsDiv.innerHTML = content;
-            modal.classList.remove('hidden');
+            projectModal.classList.remove('hidden');
         }
-
-        function closeModal() {
-            document.getElementById('projectModal').classList.add('hidden');
-        }
-
-        function createCategoryToggles(data) {
-            const togglesDiv = document.getElementById('categoryToggles');
-            togglesDiv.innerHTML = '';
-            data.forEach(category => {
-                const toggleDiv = document.createElement('div');
-                toggleDiv.className = 'flex items-center';
-                toggleDiv.innerHTML = `
-                    <input type="checkbox" id="${category.name}" checked onchange="toggleCategory('${category.name}')" class="mr-2">
-                    <label for="${category.name}" class="text-sm font-medium text-gray-700">${category.name}</label>
-                `;
-                togglesDiv.appendChild(toggleDiv);
-            });
-        }
-
-        function toggleCategory(categoryName) {
-            const categoryDiv = document.querySelector(`.category[data-name="${categoryName}"]`);
-            if (categoryDiv) {
-                categoryDiv.classList.toggle('hidden');
-            }
-        }
-
-        function filterProjects() {
-            document.getElementById('loading').classList.remove('hidden');
-            const query = document.getElementById('query').value;
-
-            fetch(`/api/filter?query=${encodeURIComponent(query)}`)
-                .then(response => response.json())
-                .then(data => {
-                    const filteredData = [{
-                        name: 'Filtered Results',
-                        projects: data.projects
-                    }];
-                    createVisualization(filteredData);
-                    document.getElementById('categoryToggles').classList.add('hidden');
-                    document.getElementById('loading').classList.add('hidden');
-                })
-                .catch(error => {
-                    console.error('Error filtering projects:', error);
-                    document.getElementById('loading').classList.add('hidden');
-                    alert('Error filtering projects. Please try again.');
-                });
-        }
-
-        function clearFilters() {
-            document.getElementById('query').value = '';
-            createVisualization(projectsData);
-            document.getElementById('categoryToggles').classList.remove('hidden');
-            createCategoryToggles(projectsData);
-        }
-
-        // Add event listener for Enter key
-        document.getElementById('query').addEventListener('keypress', function(event) {
-            if (event.key === 'Enter') {
-                filterProjects();
-            }
-        });
     </script>
 </body>
 </html>
