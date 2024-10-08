@@ -52,7 +52,7 @@ def filter_projects():
     
     # Use OpenAI to interpret the query and find relevant projects
     response = client.chat.completions.create(
-        model="gpt-4",
+        model="gpt-4o",
         messages=[
             {"role": "system", "content": (
                 "You are an expert on Apache projects. Your task is to "
@@ -133,6 +133,6 @@ def filter_projects():
         'stacks': stacks,
         'total_projects': len(filtered_projects)
     })
-    
+
 if __name__ == '__main__':
     app.run(debug=True)
