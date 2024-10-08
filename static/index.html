@@ -3,18 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Apache Projects Visualizer</title>
+    <title>ASF Projects Visualizer</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .project-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
             gap: 16px;
         }
         .project-card {
             border: 1px solid #e2e8f0;
             border-radius: 8px;
-            padding: 12px;
+            padding: 10px;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -27,15 +27,20 @@
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
         .project-logo {
-            width: 80px;
-            height: 80px;
+            width: 60px;
+            height: 60px;
             object-fit: contain;
             margin-bottom: 8px;
         }
         .project-name {
-            font-size: 14px;
+            font-size: 12px;
             font-weight: 600;
-            margin-bottom: 4px;
+            margin-bottom: 2px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
         }
         .category-section {
             margin-bottom: 24px;
@@ -60,6 +65,35 @@
         .filtered-project-card:hover {
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
+        .stack-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+            background-color: white;
+        }
+        .stack-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .stack-description {
+            font-size: 14px;
+            color: #4a5568;
+            margin-bottom: 12px;
+        }
+        .stack-projects {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .stack-project {
+            font-size: 12px;
+            background-color: #edf2f7;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+
     </style>
 </head>
 <body class="bg-gray-100">
@@ -73,7 +107,10 @@
                 <button id="queryButton" class="bg-blue-500 text-white px-4 py-2 rounded">Query</button>
                 <button id="clearButton" class="bg-gray-300 text-gray-700 px-4 py-2 rounded">Clear</button>
             </div>
-            <div id="categoryFilters" class="flex flex-wrap gap-4 mb-4"></div>
+            <div class="flex items-center mb-4">
+                <button id="toggleAllCategories" class="bg-blue-500 text-white px-4 py-2 rounded mr-4">Deselect All Categories</button>
+                <div id="categoryFilters" class="flex flex-wrap gap-4"></div>
+            </div>
         </div>
 
         <div id="defaultView">
@@ -81,8 +118,8 @@
         </div>
 
         <div id="filteredView" class="hidden">
-            <h2 class="text-2xl font-bold mb-4">Suggested Stack</h2>
-            <div id="suggestedStack" class="bg-white p-4 rounded shadow overflow-y-auto" style="max-height: 600px;"></div>
+            <h2 class="text-2xl font-bold mb-4">Suggested Stacks</h2>
+            <div id="suggestedStacks" class="bg-white p-4 rounded shadow overflow-y-auto" style="max-height: 600px;"></div>
         </div>
     </div>
 
@@ -98,7 +135,7 @@
 
     <div id="loading" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
         <div class="bg-white p-8 rounded-lg">
-            <p>Loading projects...</p>
+            <p>Querying projects...</p>
         </div>
     </div>
 
@@ -140,6 +177,11 @@
             loading.classList.add('hidden');
         }
 
+        const toggleAllCategoriesButton = document.getElementById('toggleAllCategories');
+        let allCategoriesSelected = true;
+
+        toggleAllCategoriesButton.addEventListener('click', toggleAllCategories);
+
         function loadProjects() {
             showLoading();
             fetch('/api/projects')
@@ -161,22 +203,41 @@
             categories.forEach(category => {
                 const filterDiv = document.createElement('div');
                 filterDiv.className = 'flex items-center';
-                const isChecked = category.name.toLowerCase() !== 'retired';
+                const isChecked = true;
                 filterDiv.innerHTML = `
-                    <input type="checkbox" id="${category.name}" name="${category.name}" ${isChecked ? 'checked' : ''} class="mr-2">
+                    <input type="checkbox" id="${category.name}" name="${category.name}" ${isChecked ? 'checked' : ''} class="mr-2 category-checkbox">
                     <label for="${category.name}" class="text-sm">${category.name} (${category.projects.length})</label>
                 `;
                 const checkbox = filterDiv.querySelector('input');
                 checkbox.addEventListener('change', () => toggleCategory(category.name, checkbox.checked));
                 categoryFilters.appendChild(filterDiv);
             });
-            toggleCategory('Retired', false);
+            updateToggleAllButton();
         }
 
-        function toggleCategory(categoryName, isChecked) {
+        function toggleAllCategories() {
+            allCategoriesSelected = !allCategoriesSelected;
+            const checkboxes = document.querySelectorAll('.category-checkbox');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = allCategoriesSelected;
+                toggleCategory(checkbox.name, allCategoriesSelected, false);
+            });
+            updateToggleAllButton();
+        }
+
+        function updateToggleAllButton() {
+            const checkboxes = document.querySelectorAll('.category-checkbox');
+            allCategoriesSelected = Array.from(checkboxes).every(checkbox => checkbox.checked);
+            toggleAllCategoriesButton.textContent = allCategoriesSelected ? 'Deselect All' : 'Select All';
+        }
+
+        function toggleCategory(categoryName, isChecked, shouldUpdateToggleAllButton = true) {
             const categorySection = document.querySelector(`.category-section[data-category="${categoryName}"]`);
             if (categorySection) {
                 categorySection.style.display = isChecked ? 'block' : 'none';
+            }
+            if (shouldUpdateToggleAllButton) {
+                updateToggleAllButton();
             }
         }
 
@@ -261,7 +322,7 @@
                 fetch(`/api/filter?query=${encodeURIComponent(query)}`)
                     .then(response => response.json())
                     .then(data => {
-                        renderSuggestedStack(data.projects);
+                        renderSuggestedStacks(data.stacks, data.projects);
                         defaultView.classList.add('hidden');
                         filteredView.classList.remove('hidden');
                         categoryFilters.classList.add('hidden');
@@ -274,14 +335,49 @@
             }
         }
 
+        function renderSuggestedStacks(stacks, projects) {
+            const suggestedStacksContainer = document.getElementById('suggestedStacks');
+            suggestedStacksContainer.innerHTML = '';
+
+            if (stacks.length === 0) {
+                suggestedStacksContainer.innerHTML = '<p>No suggested stacks found.</p>';
+                return;
+            }
+
+            stacks.forEach(stack => {
+                const stackCard = document.createElement('div');
+                stackCard.className = 'stack-card';
+                stackCard.innerHTML = `
+                    <h3 class="stack-title">${stack.name}</h3>
+                    <p class="stack-description">${stack.description}</p>
+                    <div class="stack-projects">
+                        ${stack.projects.map(projectName => `<span class="stack-project">${projectName}</span>`).join('')}
+                    </div>
+                `;
+                suggestedStacksContainer.appendChild(stackCard);
+            });
+
+            // Render filtered projects
+            const filteredProjectsCard = document.createElement('div');
+            filteredProjectsCard.className = 'stack-card';
+            filteredProjectsCard.innerHTML = '<h3 class="stack-title">Relevant Projects</h3>';
+            const projectList = document.createElement('div');
+            projectList.className = 'space-y-4';
+            projects.forEach(project => {
+                const projectCard = createProjectCard(project, project.category, true);
+                projectList.appendChild(projectCard);
+            });
+            filteredProjectsCard.appendChild(projectList);
+            suggestedStacksContainer.appendChild(filteredProjectsCard);
+        }
+
         function clearQuery() {
             queryInput.value = '';
             searchInput.value = '';
             defaultView.classList.remove('hidden');
             filteredView.classList.add('hidden');
             categoryFilters.classList.remove('hidden');
-            suggestedStack.innerHTML = '';
-            renderProjects(allProjects);
+            document.getElementById('suggestedStacks').innerHTML = '';
         }
 
         function renderSuggestedStack(projects) {

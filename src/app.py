@@ -60,20 +60,21 @@ def filter_projects():
                 "a list of relevant Apache project names along with brief "
                 "explanations for why each project is relevant. Also, "
                 "describe relationships between the projects and suggest "
-                "a possible stack of projects. Provide your response in JSON format "
+                "multiple possible stacks of projects. Provide your response in JSON format "
                 "with the following structure: "
                 "{\"projects\": {\"project_name\": {\"explanation\": \"...\", \"role\": \"...\"}}, "
                 "\"relationships\": [{\"source\": \"project1\", \"target\": \"project2\", "
                 "\"description\": \"relationship_description\"}], "
-                "\"stack\": [\"project1\", \"project2\", ...]}"
+                "\"stacks\": [{\"name\": \"stack_name\", \"projects\": [\"project1\", \"project2\", ...], \"description\": \"stack_description\"}]}"
+                "Provide at least 2 different stack suggestions if possible. "
                 "Do not include any text before or after the JSON content."
             )},
             {"role": "user", "content": (
                 f"Given the query: '{query}', what Apache projects would "
                 "be most relevant, how are they related to each other, and "
-                "what would be a possible stack of these projects? Please provide "
+                "what would be possible stacks of these projects? Please provide "
                 "the project names, brief explanations for why each project is relevant, "
-                "its role in the stack, relationships between the projects, and a suggested stack."
+                "its role in the stack, relationships between the projects, and multiple suggested stacks."
             )}
         ]
     )
@@ -90,14 +91,14 @@ def filter_projects():
 
         relevant_projects = ai_response.get('projects', {})
         relationships = ai_response.get('relationships', [])
-        stack = ai_response.get('stack', [])
+        stacks = ai_response.get('stacks', [])
     except (json.JSONDecodeError, ValueError) as e:
         print(f"Error parsing JSON from OpenAI response: {str(e)}")
         print("Raw response:")
         print(content)
         relevant_projects = {}
         relationships = []
-        stack = []
+        stacks = []
 
     # Filter and explain projects based on AI response
     filtered_projects = []
@@ -129,9 +130,9 @@ def filter_projects():
     return jsonify({
         'projects': filtered_projects,
         'graph': graph_data,
-        'stack': stack,
+        'stacks': stacks,
         'total_projects': len(filtered_projects)
     })
-
+    
 if __name__ == '__main__':
     app.run(debug=True)
