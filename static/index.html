@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Apache Projects Visualizer</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
         .project-grid {
             display: grid;
@@ -61,8 +60,6 @@
         .filtered-project-card:hover {
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
-        .node { stroke: #fff; stroke-width: 1.5px; }
-        .link { stroke: #999; stroke-opacity: 0.6; }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -85,10 +82,7 @@
 
         <div id="filteredView" class="hidden">
             <h2 class="text-2xl font-bold mb-4">Suggested Stack</h2>
-            <div class="flex flex-wrap gap-6">
-                <div id="stackVisualization" class="w-full lg:w-1/2 bg-white p-4 rounded shadow"></div>
-                <div id="filteredProjectList" class="w-full lg:w-1/2 bg-white p-4 rounded shadow overflow-y-auto" style="max-height: 600px;"></div>
-            </div>
+            <div id="suggestedStack" class="bg-white p-4 rounded shadow overflow-y-auto" style="max-height: 600px;"></div>
         </div>
     </div>
 
@@ -118,8 +112,7 @@
         const modalTitle = document.getElementById('modalTitle');
         const projectDetails = document.getElementById('projectDetails');
         const loading = document.getElementById('loading');
-        const stackVisualization = document.getElementById('stackVisualization');
-        const filteredProjectList = document.getElementById('filteredProjectList');
+        const suggestedStack = document.getElementById('suggestedStack');
         const defaultView = document.getElementById('defaultView');
         const filteredView = document.getElementById('filteredView');
         const categoryFilters = document.getElementById('categoryFilters');
@@ -168,14 +161,16 @@
             categories.forEach(category => {
                 const filterDiv = document.createElement('div');
                 filterDiv.className = 'flex items-center';
+                const isChecked = category.name.toLowerCase() !== 'retired';
                 filterDiv.innerHTML = `
-                    <input type="checkbox" id="${category.name}" name="${category.name}" checked class="mr-2">
+                    <input type="checkbox" id="${category.name}" name="${category.name}" ${isChecked ? 'checked' : ''} class="mr-2">
                     <label for="${category.name}" class="text-sm">${category.name} (${category.projects.length})</label>
                 `;
                 const checkbox = filterDiv.querySelector('input');
                 checkbox.addEventListener('change', () => toggleCategory(category.name, checkbox.checked));
                 categoryFilters.appendChild(filterDiv);
             });
+            toggleCategory('Retired', false);
         }
 
         function toggleCategory(categoryName, isChecked) {
@@ -202,6 +197,7 @@
                 });
                 visualization.appendChild(categorySection);
             });
+            toggleCategory('Retired', false);
         }
 
         function createProjectCard(project, categoryName, isFilteredView = false) {
@@ -233,16 +229,19 @@
         function queryProjects() {
             const query = queryInput.value;
             if (query) {
-                loading.classList.remove('hidden');
+                showLoading();
                 fetch(`/api/filter?query=${encodeURIComponent(query)}`)
                     .then(response => response.json())
                     .then(data => {
-                        renderStack(data.stack, data.graph);
-                        renderFilteredProjectList(data.projects);
+                        renderSuggestedStack(data.projects);
                         defaultView.classList.add('hidden');
                         filteredView.classList.remove('hidden');
                         categoryFilters.classList.add('hidden');
-                        loading.classList.add('hidden');
+                        hideLoading();
+                    })
+                    .catch(error => {
+                        console.error('Error querying projects:', error);
+                        hideLoading();
                     });
             }
         }
@@ -253,101 +252,15 @@
             defaultView.classList.remove('hidden');
             filteredView.classList.add('hidden');
             categoryFilters.classList.remove('hidden');
-            stackVisualization.innerHTML = '';
-            filteredProjectList.innerHTML = '';
+            suggestedStack.innerHTML = '';
             renderProjects(allProjects);
         }
 
-        function renderStack(stack, graph) {
-            stackVisualization.innerHTML = '<h3 class="text-xl font-bold mb-4">Project Stack Visualization</h3>';
-            const width = stackVisualization.clientWidth;
-            const height = 400;
-
-            const svg = d3.select(stackVisualization)
-                .append('svg')
-                .attr('width', width)
-                .attr('height', height);
-
-            const simulation = d3.forceSimulation(graph.nodes)
-                .force('link', d3.forceLink(graph.links).id(d => d.id))
-                .force('charge', d3.forceManyBody().strength(-300))
-                .force('center', d3.forceCenter(width / 2, height / 2));
-
-            const link = svg.append('g')
-                .selectAll('line')
-                .data(graph.links)
-                .enter().append('line')
-                .attr('class', 'link');
-
-            const node = svg.append('g')
-                .selectAll('circle')
-                .data(graph.nodes)
-                .enter().append('circle')
-                .attr('class', 'node')
-                .attr('r', 10)
-                .attr('fill', d => d3.schemeCategory10[d.group % 10])
-                .call(d3.drag()
-                    .on('start', dragstarted)
-                    .on('drag', dragged)
-                    .on('end', dragended));
-
-            node.append('title')
-                .text(d => d.id);
-
-            const label = svg.append('g')
-                .selectAll('text')
-                .data(graph.nodes)
-                .enter().append('text')
-                .attr('dx', 12)
-                .attr('dy', '.35em')
-                .text(d => d.id);
-
-            simulation
-                .nodes(graph.nodes)
-                .on('tick', ticked);
-
-            simulation.force('link')
-                .links(graph.links);
-
-            function ticked() {
-                link
-                    .attr('x1', d => d.source.x)
-                    .attr('y1', d => d.source.y)
-                    .attr('x2', d => d.target.x)
-                    .attr('y2', d => d.target.y);
-
-                node
-                    .attr('cx', d => d.x)
-                    .attr('cy', d => d.y);
-
-                label
-                    .attr('x', d => d.x)
-                    .attr('y', d => d.y);
-            }
-
-            function dragstarted(event) {
-                if (!event.active) simulation.alphaTarget(0.3).restart();
-                event.subject.fx = event.subject.x;
-                event.subject.fy = event.subject.y;
-            }
-
-            function dragged(event) {
-                event.subject.fx = event.x;
-                event.subject.fy = event.y;
-            }
-
-            function dragended(event) {
-                if (!event.active) simulation.alphaTarget(0);
-                event.subject.fx = null;
-                event.subject.fy = null;
-            }
-        }
-
-        function renderFilteredProjectList(projects) {
-            filteredProjectList.innerHTML = '<h3 class="text-xl font-bold mb-4">Filtered Projects</h3>';
+        function renderSuggestedStack(projects) {
+            suggestedStack.innerHTML = '';
             projects.forEach(project => {
                 const projectCard = createProjectCard(project, project.category, true);
-                filteredProjectList.appendChild(projectCard);
+                suggestedStack.appendChild(projectCard);
             });
         }
 
@@ -383,7 +296,6 @@
                 }
             });
 
-            // Show/hide category sections based on whether they have visible projects
             const categorySections = document.querySelectorAll('.category-section');
             categorySections.forEach(section => {
                 const visibleProjects = section.querySelectorAll('.project-card[style="display: flex;"]');
