@@ -7,6 +7,60 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
+        .project-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 16px;
+        }
+        .project-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            background-color: white;
+            cursor: pointer;
+            transition: box-shadow 0.3s ease;
+        }
+        .project-card:hover {
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .project-logo {
+            width: 80px;
+            height: 80px;
+            object-fit: contain;
+            margin-bottom: 8px;
+        }
+        .project-name {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .category-section {
+            margin-bottom: 24px;
+        }
+        .category-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #2d3748;
+        }
+        .filtered-project-card {
+            display: flex;
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 16px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background-color: white;
+            cursor: pointer;
+            transition: box-shadow 0.3s ease;
+        }
+        .filtered-project-card:hover {
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
         .node { stroke: #fff; stroke-width: 1.5px; }
         .link { stroke: #999; stroke-opacity: 0.6; }
     </style>
@@ -17,15 +71,16 @@
 
         <div class="mb-6">
             <div class="flex space-x-4 mb-4">
+                <input type="text" id="searchInput" placeholder="Search projects by name" class="flex-grow p-2 border rounded">
                 <input type="text" id="queryInput" placeholder="Query Projects" class="flex-grow p-2 border rounded">
                 <button id="queryButton" class="bg-blue-500 text-white px-4 py-2 rounded">Query</button>
                 <button id="clearButton" class="bg-gray-300 text-gray-700 px-4 py-2 rounded">Clear</button>
             </div>
-            <div id="categoryFilters" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mb-4"></div>
+            <div id="categoryFilters" class="flex flex-wrap gap-4 mb-4"></div>
         </div>
 
         <div id="defaultView">
-            <div id="visualization" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"></div>
+            <div id="visualization"></div>
         </div>
 
         <div id="filteredView" class="hidden">
@@ -49,11 +104,12 @@
 
     <div id="loading" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
         <div class="bg-white p-8 rounded-lg">
-            <p>Querying...</p>
+            <p>Loading projects...</p>
         </div>
     </div>
 
     <script>
+        const searchInput = document.getElementById('searchInput');
         const queryInput = document.getElementById('queryInput');
         const queryButton = document.getElementById('queryButton');
         const clearButton = document.getElementById('clearButton');
@@ -67,6 +123,9 @@
         const defaultView = document.getElementById('defaultView');
         const filteredView = document.getElementById('filteredView');
         const categoryFilters = document.getElementById('categoryFilters');
+        const visualization = document.getElementById('visualization');
+
+        let allProjects = [];
 
         queryButton.addEventListener('click', queryProjects);
         clearButton.addEventListener('click', clearQuery);
@@ -76,18 +135,31 @@
                 queryProjects();
             }
         });
+        searchInput.addEventListener('input', filterProjectsByName);
 
-        // Load default projects view
         loadProjects();
 
-        function loadProjects() {
+        function showLoading() {
             loading.classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            loading.classList.add('hidden');
+        }
+
+        function loadProjects() {
+            showLoading();
             fetch('/api/projects')
                 .then(response => response.json())
                 .then(data => {
+                    allProjects = data.categories;
                     renderCategoryFilters(data.categories);
                     renderProjects(data.categories);
-                    loading.classList.add('hidden');
+                    hideLoading();
+                })
+                .catch(error => {
+                    console.error('Error loading projects:', error);
+                    hideLoading();
                 });
         }
 
@@ -107,36 +179,54 @@
         }
 
         function toggleCategory(categoryName, isChecked) {
-            const categoryProjects = document.querySelectorAll(`.project-card[data-category="${categoryName}"]`);
-            categoryProjects.forEach(project => {
-                project.style.display = isChecked ? 'block' : 'none';
-            });
+            const categorySection = document.querySelector(`.category-section[data-category="${categoryName}"]`);
+            if (categorySection) {
+                categorySection.style.display = isChecked ? 'block' : 'none';
+            }
         }
 
         function renderProjects(categories) {
-            const visualization = document.getElementById('visualization');
             visualization.innerHTML = '';
             categories.forEach(category => {
+                const categorySection = document.createElement('div');
+                categorySection.className = 'category-section mb-8';
+                categorySection.dataset.category = category.name;
+                categorySection.innerHTML = `
+                    <h2 class="text-2xl font-bold mb-4">${category.name}</h2>
+                    <div class="project-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+                `;
+                const projectGrid = categorySection.querySelector('.project-grid');
                 category.projects.forEach(project => {
                     const projectCard = createProjectCard(project, category.name);
-                    visualization.appendChild(projectCard);
+                    projectGrid.appendChild(projectCard);
                 });
+                visualization.appendChild(categorySection);
             });
         }
 
-        function createProjectCard(project, categoryName) {
+        function createProjectCard(project, categoryName, isFilteredView = false) {
             const card = document.createElement('div');
-            card.className = 'project-card bg-white p-4 rounded shadow';
-            card.dataset.category = categoryName;
-            card.innerHTML = `
-                <div class="flex items-center mb-2">
-                    <img src="${project.logo || '/api/placeholder/32/32'}" alt="${project.name} logo" class="w-8 h-8 mr-2">
-                    <h3 class="text-lg font-semibold">${project.name}</h3>
-                </div>
-                <p class="text-sm text-gray-600 mb-4">${project.shortdesc}</p>
-                <button class="bg-blue-500 text-white px-2 py-1 rounded text-sm">View Details</button>
-            `;
-            card.querySelector('button').addEventListener('click', () => showProjectDetails(project));
+            
+            if (isFilteredView) {
+                card.className = 'filtered-project-card';
+                card.innerHTML = `
+                    <img src="${project.logo || '/api/placeholder/80/80'}" alt="${project.name} logo" class="w-20 h-20 mr-4 flex-shrink-0">
+                    <div class="flex-grow">
+                        <h3 class="text-lg font-semibold mb-1">${project.name}</h3>
+                        <p class="text-sm text-gray-600 mb-2">${project.shortdesc}</p>
+                        <p class="text-xs text-gray-500"><strong>Reason:</strong> ${project.filter_explanation}</p>
+                    </div>
+                `;
+            } else {
+                card.className = 'project-card bg-white p-4 rounded shadow cursor-pointer transition-shadow hover:shadow-md';
+                card.dataset.category = categoryName;
+                card.innerHTML = `
+                    <img src="${project.logo || '/api/placeholder/80/80'}" alt="${project.name} logo" class="w-20 h-20 mx-auto mb-2">
+                    <div class="project-name text-center font-semibold">${project.name}</div>
+                `;
+            }
+            
+            card.addEventListener('click', () => showProjectDetails(project));
             return card;
         }
 
@@ -159,11 +249,13 @@
 
         function clearQuery() {
             queryInput.value = '';
+            searchInput.value = '';
             defaultView.classList.remove('hidden');
             filteredView.classList.add('hidden');
             categoryFilters.classList.remove('hidden');
             stackVisualization.innerHTML = '';
             filteredProjectList.innerHTML = '';
+            renderProjects(allProjects);
         }
 
         function renderStack(stack, graph) {
@@ -254,19 +346,7 @@
         function renderFilteredProjectList(projects) {
             filteredProjectList.innerHTML = '<h3 class="text-xl font-bold mb-4">Filtered Projects</h3>';
             projects.forEach(project => {
-                const projectCard = document.createElement('div');
-                projectCard.className = 'bg-white shadow rounded p-4 mb-4';
-                projectCard.innerHTML = `
-                    <div class="flex items-center mb-2">
-                        <img src="${project.logo || '/api/placeholder/32/32'}" alt="${project.name} logo" class="w-8 h-8 mr-2">
-                        <h4 class="text-lg font-semibold">${project.name}</h4>
-                    </div>
-                    <p class="text-sm text-gray-600 mb-2">${project.shortdesc}</p>
-                    <p class="text-sm mb-2"><strong>Role:</strong> ${project.role}</p>
-                    <p class="text-sm mb-2"><strong>Reason:</strong> ${project.filter_explanation}</p>
-                    <button class="mt-2 bg-blue-500 text-white px-2 py-1 rounded text-sm">View Details</button>
-                `;
-                projectCard.querySelector('button').addEventListener('click', () => showProjectDetails(project));
+                const projectCard = createProjectCard(project, project.category, true);
                 filteredProjectList.appendChild(projectCard);
             });
         }
@@ -275,7 +355,7 @@
             modalTitle.textContent = project.name;
             projectDetails.innerHTML = `
                 <div class="flex items-center mb-4">
-                    <img src="${project.logo || '/api/placeholder/64/64'}" alt="${project.name} logo" class="w-16 h-16 mr-4">
+                    <img src="${project.logo || '/api/placeholder/80/80'}" alt="${project.name} logo" class="w-20 h-20 mr-4">
                     <div>
                         <p><strong>Category:</strong> ${project.category}</p>
                         <p><strong>Programming Language:</strong> ${project.programming_language}</p>
@@ -288,6 +368,27 @@
                 ${project.download_page ? `<p><strong>Download Page:</strong> <a href="${project.download_page}" target="_blank" class="text-blue-500">${project.download_page}</a></p>` : ''}
             `;
             projectModal.classList.remove('hidden');
+        }
+
+        function filterProjectsByName() {
+            const searchTerm = searchInput.value.toLowerCase();
+            const projectCards = document.querySelectorAll('.project-card');
+            
+            projectCards.forEach(card => {
+                const projectName = card.querySelector('.project-name').textContent.toLowerCase();
+                if (projectName.includes(searchTerm)) {
+                    card.style.display = 'flex';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+
+            // Show/hide category sections based on whether they have visible projects
+            const categorySections = document.querySelectorAll('.category-section');
+            categorySections.forEach(section => {
+                const visibleProjects = section.querySelectorAll('.project-card[style="display: flex;"]');
+                section.style.display = visibleProjects.length > 0 ? 'block' : 'none';
+            });
         }
     </script>
 </body>

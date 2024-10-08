@@ -84,6 +84,8 @@ def filter_projects():
         stack = ai_response.get('stack', [])
     except json.JSONDecodeError:
         print("Error decoding JSON from OpenAI response. Using fallback method.")
+        print("Error decoding JSON from OpenAI response. Raw response:")
+        print(response.choices[0].message.content)
         relevant_projects = {}
         relationships = []
         stack = []
@@ -121,6 +123,6 @@ def filter_projects():
         'stack': stack,
         'total_projects': len(filtered_projects)
     })
-        
+
 if __name__ == '__main__':
     app.run(debug=True)
