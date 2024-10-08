@@ -5,6 +5,7 @@ import os
 from openai import OpenAI
 import re
 import networkx as nx
+from fuzzywuzzy import process
 
 app = Flask(__name__, static_folder='../static')
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -51,39 +52,62 @@ def filter_projects():
     
     # Use OpenAI to interpret the query and find relevant projects
     response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model="gpt-4",
         messages=[
-            {"role": "system", "content": "You are an expert on Apache projects. Your task is to interpret user queries about Apache projects and return a list of relevant Apache project names along with brief explanations for why each project is relevant. Also, describe relationships between the projects. Provide your response in JSON format with the following structure: {\"projects\": {\"project_name\": \"explanation\"}, \"relationships\": [{\"project1\": \"project2\", \"description\": \"relationship_description\"}]}"},
-            {"role": "user", "content": f"Given the query: '{query}', what Apache projects would be most relevant, and how are they related to each other? Please provide the project names, brief explanations for why each project is relevant, and relationships between the projects."}
+            {"role": "system", "content": (
+                "You are an expert on Apache projects. Your task is to "
+                "interpret user queries about Apache projects and return "
+                "a list of relevant Apache project names along with brief "
+                "explanations for why each project is relevant. Also, "
+                "describe relationships between the projects and suggest "
+                "a possible stack of projects. Provide your response in JSON format "
+                "with the following structure: "
+                "{\"projects\": {\"project_name\": \"explanation\"}, "
+                "\"relationships\": [{\"source\": \"project1\", \"target\": \"project2\", "
+                "\"description\": \"relationship_description\"}], "
+                "\"stack\": [\"project1\", \"project2\", ...]}"
+            )},
+            {"role": "user", "content": (
+                f"Given the query: '{query}', what Apache projects would "
+                "be most relevant, how are they related to each other, and "
+                "what would be a possible stack of these projects? Please provide "
+                "the project names, brief explanations for why each project is relevant, "
+                "relationships between the projects, and a suggested stack."
+            )}
         ]
     )
     
     try:
         ai_response = json.loads(response.choices[0].message.content)
+        print(ai_response)
         relevant_projects = ai_response.get('projects', {})
         relationships = ai_response.get('relationships', [])
+        stack = ai_response.get('stack', [])
     except json.JSONDecodeError:
         print("Error decoding JSON from OpenAI response. Using fallback method.")
         relevant_projects = {}
         relationships = []
+        stack = []
 
     # Filter and explain projects based on AI response
     filtered_projects = []
     for project_name, explanation in relevant_projects.items():
-        project = next((p for p in apache_projects if p['name'] == project_name), None)
-        if project:
-            project_copy = project.copy()
-            project_copy['filter_explanation'] = explanation
-            filtered_projects.append(project_copy)
+        # Use fuzzy matching to find the closest project name
+        closest_match, score = process.extractOne(project_name, [p['name'] for p in apache_projects])
+        if score >= 80:  # You can adjust this threshold as needed
+            project = next((p for p in apache_projects if p['name'] == closest_match), None)
+            if project:
+                project_copy = project.copy()
+                project_copy['filter_explanation'] = explanation
+                project_copy['matched_name'] = project_name  # Store the original AI-provided name
+                filtered_projects.append(project_copy)
 
     # Create a graph of project relationships
     G = nx.Graph()
     for project in filtered_projects:
         G.add_node(project['name'])
     for rel in relationships:
-        for proj1, proj2 in rel.items():
-            if proj1 != 'description':
-                G.add_edge(proj1, proj2, description=rel['description'])
+        G.add_edge(rel['source'], rel['target'], description=rel['description'])
 
     # Convert the graph to a format suitable for D3.js
     graph_data = {
@@ -94,8 +118,9 @@ def filter_projects():
     return jsonify({
         'projects': filtered_projects,
         'graph': graph_data,
+        'stack': stack,
         'total_projects': len(filtered_projects)
     })
-
+    
 if __name__ == '__main__':
     app.run(debug=True)

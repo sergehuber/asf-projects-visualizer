@@ -4,385 +4,197 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Apache Projects Visualizer</title>
-    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        #controls {
-            margin-bottom: 20px;
-            display: flex;
-            gap: 10px;
-        }
-        #query {
-            width: 300px;
-            padding: 5px;
-        }
-        #visualization {
-            width: 100%;
-            height: 800px;
-            border: 1px solid #ccc;
-            overflow: hidden;
-        }
-        .node {
-            cursor: pointer;
-        }
-        .node circle {
-            stroke: #fff;
-            stroke-width: 1.5px;
-        }
-        .node text {
-            font-size: 10px;
-            font-weight: bold;
-        }
-        .link {
-            stroke: #999;
-            stroke-opacity: 0.6;
-        }
-        #project-details {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background-color: white;
-            border: 1px solid #ddd;
-            padding: 20px;
-            border-radius: 5px;
-            max-width: 80%;
-            max-height: 80%;
-            overflow-y: auto;
-            display: none;
-            z-index: 1000;
-        }
-        #close-details {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            cursor: pointer;
-        }
-        #loading {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 24px;
-            background-color: rgba(255, 255, 255, 0.8);
-            padding: 20px;
-            border-radius: 10px;
-            display: none;
-            z-index: 1000;
-        }
-        #total-projects {
-            font-size: 18px;
-            margin-bottom: 10px;
+        .project-box {
+            width: 200px;
+            height: 150px;
         }
     </style>
 </head>
-<body>
-    <h1>Apache Projects Visualizer</h1>
-    <div id="total-projects"></div>
-    <div id="controls">
-        <input type="text" id="query" placeholder="Enter your query...">
-        <button onclick="filterProjects()">Filter Projects</button>
-        <button onclick="clearFilters()">Clear Filters</button>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold mb-8 text-gray-800">Apache Projects Visualizer</h1>
+        <div class="mb-6">
+            <div class="flex space-x-4 mb-4">
+                <input type="text" id="query" placeholder="Enter your query..." class="flex-grow px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <button onclick="filterProjects()" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500">Filter Projects</button>
+                <button onclick="clearFilters()" class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500">Clear Filters</button>
+            </div>
+            <div id="categoryToggles" class="flex flex-wrap gap-4 mb-4"></div>
+        </div>
+        <div id="visualization" class="flex flex-wrap gap-6"></div>
     </div>
-    <div id="visualization"></div>
-    <div id="project-details">
-        <span id="close-details" onclick="closeProjectDetails()">×</span>
-        <div id="project-details-content"></div>
+
+    <div id="projectModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+        <div class="bg-white p-8 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h2 id="modalTitle" class="text-2xl font-bold"></h2>
+                <button onclick="closeModal()" class="text-2xl">&times;</button>
+            </div>
+            <div id="projectDetails"></div>
+        </div>
     </div>
-    <div id="loading">Loading projects...</div>
+
+    <div id="loading" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+        <div class="bg-white p-8 rounded-lg">
+            <p class="text-xl">Loading projects...</p>
+        </div>
+    </div>
 
     <script>
         let projectsData = [];
-        let svg, zoom, simulation;
-
-        // Show loading indicator
-        document.getElementById('loading').style.display = 'block';
 
         // Fetch projects data
         fetch('/api/projects')
             .then(response => response.json())
             .then(data => {
                 projectsData = data.categories;
-                document.getElementById('total-projects').textContent = `Total Projects: ${data.total_projects}`;
                 createVisualization(projectsData);
-                // Hide loading indicator
-                document.getElementById('loading').style.display = 'none';
+                createCategoryToggles(projectsData);
+                document.getElementById('loading').classList.add('hidden');
             })
             .catch(error => {
                 console.error('Error fetching projects:', error);
-                // Hide loading indicator and show error message
-                document.getElementById('loading').style.display = 'none';
-                alert('Error loading projects. Please try again later.');
+                document.getElementById('loading').classList.add('hidden');
             });
 
         function createVisualization(data) {
-            const width = document.getElementById('visualization').clientWidth;
-            const height = 800;
-
-            d3.select("#visualization").selectAll("*").remove();
-
-            svg = d3.select("#visualization")
-                .append("svg")
-                .attr("width", width)
-                .attr("height", height);
-
-            const g = svg.append("g");
-
-            // Prepare data for force-directed graph
-            const nodes = [];
-            const links = [];
+            const visualizationDiv = document.getElementById('visualization');
+            visualizationDiv.innerHTML = '';
 
             data.forEach(category => {
-                // Add category node
-                nodes.push({ id: category.name, group: "category", size: 30 });
+                const categoryDiv = document.createElement('div');
+                categoryDiv.className = 'category mb-8 w-full';
+                categoryDiv.setAttribute('data-name', category.name);
+                
+                const categoryTitle = document.createElement('h2');
+                categoryTitle.className = 'text-xl font-semibold mb-4 text-gray-700';
+                categoryTitle.textContent = category.name;
+                categoryDiv.appendChild(categoryTitle);
+
+                const projectsGrid = document.createElement('div');
+                projectsGrid.className = 'flex flex-wrap gap-6';
 
                 category.projects.forEach(project => {
-                    // Add project node
-                    nodes.push({ id: project.name, group: "project", category: category.name, size: 20, data: project });
-                    // Add link between project and category
-                    links.push({ source: project.name, target: category.name });
+                    const projectDiv = createProjectElement(project);
+                    projectsGrid.appendChild(projectDiv);
                 });
+
+                categoryDiv.appendChild(projectsGrid);
+                visualizationDiv.appendChild(categoryDiv);
             });
-
-            // Create force simulation
-            simulation = d3.forceSimulation(nodes)
-                .force("link", d3.forceLink(links).id(d => d.id).distance(100))
-                .force("charge", d3.forceManyBody().strength(-300))
-                .force("center", d3.forceCenter(width / 2, height / 2))
-                .force("collision", d3.forceCollide().radius(d => d.size + 10));
-
-            // Add links
-            const link = g.append("g")
-                .attr("class", "links")
-                .selectAll("line")
-                .data(links)
-                .enter().append("line")
-                .attr("class", "link");
-
-            // Add nodes
-            const node = g.append("g")
-                .attr("class", "nodes")
-                .selectAll("g")
-                .data(nodes)
-                .enter().append("g")
-                .attr("class", "node")
-                .call(d3.drag()
-                    .on("start", dragstarted)
-                    .on("drag", dragged)
-                    .on("end", dragended));
-
-            node.append("circle")
-                .attr("r", d => d.size)
-                .attr("fill", d => d.group === "category" ? "#ff9999" : "#66b3ff");
-
-            // Add project logos
-            node.filter(d => d.group === "project")
-                .append("image")
-                .attr("xlink:href", d => d.data.logo || "https://www.apache.org/foundation/press/kit/feather.png")
-                .attr("x", d => -d.size)
-                .attr("y", d => -d.size)
-                .attr("width", d => d.size * 2)
-                .attr("height", d => d.size * 2)
-                .attr("clip-path", d => `circle(${d.size}px at ${d.size}px ${d.size}px)`);
-
-            node.append("title")
-                .text(d => d.id);
-
-            node.filter(d => d.group === "category")
-                .append("text")
-                .attr("dy", 35)
-                .attr("text-anchor", "middle")
-                .text(d => d.id)
-                .style("fill", "#000")
-                .style("font-weight", "bold")
-                .style("font-size", "12px");
-
-            node.on("click", (event, d) => {
-                if (d.group === "project") {
-                    showProjectDetails(event, d.data);
-                }
-            });
-
-            // Update positions
-            simulation.on("tick", () => {
-                link
-                    .attr("x1", d => d.source.x)
-                    .attr("y1", d => d.source.y)
-                    .attr("x2", d => d.target.x)
-                    .attr("y2", d => d.target.y);
-
-                node
-                    .attr("transform", d => `translate(${d.x},${d.y})`);
-            });
-
-            // Add zoom behavior
-            zoom = d3.zoom()
-                .scaleExtent([0.1, 2])
-                .on("zoom", (event) => g.attr("transform", event.transform));
-
-            svg.call(zoom);
-
-            // Initial zoom to fit all nodes
-            const bounds = g.node().getBBox();
-            const fullWidth = bounds.width;
-            const fullHeight = bounds.height;
-            const scale = Math.min(width / fullWidth, height / fullHeight) * 0.9;
-            const translateX = (width - fullWidth * scale) / 2;
-            const translateY = (height - fullHeight * scale) / 2;
-            svg.call(zoom.transform, d3.zoomIdentity.translate(translateX, translateY).scale(scale));
         }
 
-        function createFilteredVisualization(data) {
-            const width = document.getElementById('visualization').clientWidth;
-            const height = 800;
+        function createProjectElement(project) {
+            const projectDiv = document.createElement('div');
+            projectDiv.className = 'project-box bg-white p-4 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 cursor-pointer flex flex-col items-center justify-between';
 
-            d3.select("#visualization").selectAll("*").remove();
+            const img = document.createElement('img');
+            img.src = project.logo || 'https://www.apache.org/foundation/press/kit/feather.png';
+            img.alt = project.name;
+            img.className = 'w-24 h-24 object-contain mb-4';
+            projectDiv.appendChild(img);
 
-            svg = d3.select("#visualization")
-                .append("svg")
-                .attr("width", width)
-                .attr("height", height);
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'text-center text-sm font-medium text-gray-800';
+            nameDiv.textContent = project.name;
+            projectDiv.appendChild(nameDiv);
 
-            const g = svg.append("g");
-
-            // Prepare data for force-directed graph
-            const nodes = data.projects.map(project => ({
-                id: project.name,
-                group: "project",
-                size: 30,
-                data: project
-            }));
-
-            // Create force simulation
-            simulation = d3.forceSimulation(nodes)
-                .force("charge", d3.forceManyBody().strength(-500))
-                .force("center", d3.forceCenter(width / 2, height / 2))
-                .force("collision", d3.forceCollide().radius(d => d.size + 10));
-
-            // Add nodes
-            const node = g.append("g")
-                .attr("class", "nodes")
-                .selectAll("g")
-                .data(nodes)
-                .enter().append("g")
-                .attr("class", "node")
-                .call(d3.drag()
-                    .on("start", dragstarted)
-                    .on("drag", dragged)
-                    .on("end", dragended));
-
-            node.append("circle")
-                .attr("r", d => d.size)
-                .attr("fill", "#66b3ff");
-
-            // Add project logos
-            node.append("image")
-                .attr("xlink:href", d => d.data.logo || "https://www.apache.org/foundation/press/kit/feather.png")
-                .attr("x", d => -d.size)
-                .attr("y", d => -d.size)
-                .attr("width", d => d.size * 2)
-                .attr("height", d => d.size * 2)
-                .attr("clip-path", d => `circle(${d.size}px at ${d.size}px ${d.size}px)`);
-
-            node.append("title")
-                .text(d => `${d.id}\n\n${d.data.filter_explanation}`);
-
-            node.on("click", (event, d) => {
-                showProjectDetails(event, d.data);
+            projectDiv.addEventListener('click', () => {
+                showProjectDetails(project);
             });
 
-            // Update positions
-            simulation.on("tick", () => {
-                node
-                    .attr("transform", d => `translate(${d.x},${d.y})`);
-            });
-
-            // Add zoom behavior
-            zoom = d3.zoom()
-                .scaleExtent([0.1, 2])
-                .on("zoom", (event) => g.attr("transform", event.transform));
-
-            svg.call(zoom);
-
-            // Initial zoom to fit all nodes
-            const bounds = g.node().getBBox();
-            const fullWidth = bounds.width;
-            const fullHeight = bounds.height;
-            const scale = Math.min(width / fullWidth, height / fullHeight) * 0.9;
-            const translateX = (width - fullWidth * scale) / 2;
-            const translateY = (height - fullHeight * scale) / 2;
-            svg.call(zoom.transform, d3.zoomIdentity.translate(translateX, translateY).scale(scale));
+            return projectDiv;
         }
 
-        function showProjectDetails(event, d) {
-            const detailsDiv = document.getElementById("project-details");
-            const contentDiv = document.getElementById("project-details-content");
+        function showProjectDetails(project) {
+            const modal = document.getElementById('projectModal');
+            const detailsDiv = document.getElementById('projectDetails');
+            const modalTitle = document.getElementById('modalTitle');
+            
+            modalTitle.textContent = project.name;
             
             let content = `
-                <h2>${d.name}</h2>
-                <p><strong>Category:</strong> ${d.category}</p>
-                <p><strong>Programming Language:</strong> ${d.programming_language}</p>
-                <p><strong>Short Description:</strong> ${d.shortdesc}</p>
-                <p><strong>Description:</strong> ${d.description}</p>
-                <p><strong>Homepage:</strong> <a href="${d.homepage}" target="_blank">${d.homepage}</a></p>
+                <p class="mb-2"><strong>Category:</strong> ${project.category}</p>
+                <p class="mb-2"><strong>Programming Language:</strong> ${project.programming_language || 'N/A'}</p>
+                <p class="mb-2"><strong>Short Description:</strong> ${project.shortdesc}</p>
+                <p class="mb-4"><strong>Description:</strong> ${project.description || 'N/A'}</p>
+                <p class="mb-2"><strong>Homepage:</strong> <a href="${project.homepage}" target="_blank" class="text-blue-500 hover:underline">${project.homepage}</a></p>
             `;
 
-            if (d.download_page) {
-                content += `<p><strong>Download Page:</strong> <a href="${d.download_page}" target="_blank">${d.download_page}</a></p>`;
+            if (project.download_page) {
+                content += `<p class="mb-2"><strong>Download Page:</strong> <a href="${project.download_page}" target="_blank" class="text-blue-500 hover:underline">${project.download_page}</a></p>`;
             }
 
-            if (d.bug_database) {
-                content += `<p><strong>Bug Database:</strong> <a href="${d.bug_database}" target="_blank">${d.bug_database}</a></p>`;
+            if (project.bug_database) {
+                content += `<p class="mb-2"><strong>Bug Database:</strong> <a href="${project.bug_database}" target="_blank" class="text-blue-500 hover:underline">${project.bug_database}</a></p>`;
             }
 
-            if (d.mailing_list) {
-                content += `<p><strong>Mailing List:</strong> <a href="${d.mailing_list}" target="_blank">${d.mailing_list}</a></p>`;
+            if (project.mailing_list) {
+                content += `<p class="mb-2"><strong>Mailing List:</strong> <a href="${project.mailing_list}" target="_blank" class="text-blue-500 hover:underline">${project.mailing_list}</a></p>`;
             }
 
-            if (d.filter_explanation) {
-                content += `<p><strong>Why this project was included:</strong> ${d.filter_explanation}</p>`;
+            if (project.filter_explanation) {
+                content += `<p class="mt-4"><strong>Why this project was included:</strong> ${project.filter_explanation}</p>`;
             }
 
-            contentDiv.innerHTML = content;
-            detailsDiv.style.display = "block";
+            detailsDiv.innerHTML = content;
+            modal.classList.remove('hidden');
         }
 
-        function closeProjectDetails() {
-            document.getElementById("project-details").style.display = "none";
+        function closeModal() {
+            document.getElementById('projectModal').classList.add('hidden');
+        }
+
+        function createCategoryToggles(data) {
+            const togglesDiv = document.getElementById('categoryToggles');
+            togglesDiv.innerHTML = '';
+            data.forEach(category => {
+                const toggleDiv = document.createElement('div');
+                toggleDiv.className = 'flex items-center';
+                toggleDiv.innerHTML = `
+                    <input type="checkbox" id="${category.name}" checked onchange="toggleCategory('${category.name}')" class="mr-2">
+                    <label for="${category.name}" class="text-sm font-medium text-gray-700">${category.name}</label>
+                `;
+                togglesDiv.appendChild(toggleDiv);
+            });
+        }
+
+        function toggleCategory(categoryName) {
+            const categoryDiv = document.querySelector(`.category[data-name="${categoryName}"]`);
+            if (categoryDiv) {
+                categoryDiv.classList.toggle('hidden');
+            }
         }
 
         function filterProjects() {
-            // Show loading indicator
-            document.getElementById('loading').style.display = 'block';
-
+            document.getElementById('loading').classList.remove('hidden');
             const query = document.getElementById('query').value;
+
             fetch(`/api/filter?query=${encodeURIComponent(query)}`)
                 .then(response => response.json())
                 .then(data => {
-                    document.getElementById('total-projects').textContent = `Filtered Projects: ${data.total_projects}`;
-                    createFilteredVisualization(data);
-                    // Hide loading indicator
-                    document.getElementById('loading').style.display = 'none';
+                    const filteredData = [{
+                        name: 'Filtered Results',
+                        projects: data.projects
+                    }];
+                    createVisualization(filteredData);
+                    document.getElementById('categoryToggles').classList.add('hidden');
+                    document.getElementById('loading').classList.add('hidden');
                 })
                 .catch(error => {
                     console.error('Error filtering projects:', error);
-                    // Hide loading indicator and show error message
-                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('loading').classList.add('hidden');
                     alert('Error filtering projects. Please try again.');
                 });
         }
 
         function clearFilters() {
             document.getElementById('query').value = '';
-            document.getElementById('total-projects').textContent = `Total Projects: ${projectsData.reduce((sum, category) => sum + category.projects.length, 0)}`;
             createVisualization(projectsData);
+            document.getElementById('categoryToggles').classList.remove('hidden');
+            createCategoryToggles(projectsData);
         }
 
         // Add event listener for Enter key
@@ -391,23 +203,6 @@
                 filterProjects();
             }
         });
-
-        function dragstarted(event) {
-            if (!event.active) simulation.alphaTarget(0.3).restart();
-            event.subject.fx = event.subject.x;
-            event.subject.fy = event.subject.y;
-        }
-
-        function dragged(event) {
-            event.subject.fx = event.x;
-            event.subject.fy = event.y;
-        }
-
-        function dragended(event) {
-            if (!event.active) simulation.alphaTarget(0);
-            event.subject.fx = null;
-            event.subject.fy = null;
-        }
     </script>
 </body>
 </html>
