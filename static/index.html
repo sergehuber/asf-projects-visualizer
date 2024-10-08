@@ -249,7 +249,7 @@
                 categorySection.dataset.category = category.name;
                 categorySection.innerHTML = `
                     <h2 class="text-2xl font-bold mb-4">${category.name}</h2>
-                    <div class="project-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+                    <div class="project-grid grid grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-4"></div>
                 `;
                 const projectGrid = categorySection.querySelector('.project-grid');
                 category.projects.forEach(project => {
