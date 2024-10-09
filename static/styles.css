@@ -1,0 +1,100 @@
+.project-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 16px;
+}
+.project-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    background-color: white;
+    cursor: pointer;
+    transition: box-shadow 0.3s ease;
+}
+.project-card:hover {
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+.project-logo {
+    width: 60px;
+    height: 60px;
+    object-fit: contain;
+    margin-bottom: 8px;
+}
+.project-name {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+.category-section {
+    margin-bottom: 24px;
+}
+.category-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: #2d3748;
+}
+.filtered-project-card {
+    display: flex;
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 16px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background-color: white;
+    cursor: pointer;
+    transition: box-shadow 0.3s ease;
+}
+.filtered-project-card:hover {
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+.stack-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+    background-color: white;
+}
+.stack-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+.stack-description {
+    font-size: 14px;
+    color: #4a5568;
+    margin-bottom: 12px;
+}
+.stack-projects {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.stack-project {
+    font-size: 12px;
+    background-color: #edf2f7;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+.similar-projects {
+    font-size: 8px;
+    color: #4a5568;
+    margin-top: 2px;
+}
+.feature-tag {
+    font-size: 10px;
+    background-color: #e2e8f0;
+    padding: 2px 4px;
+    border-radius: 4px;
+    margin: 2px;
+    display: inline-block;
+}

@@ -20,6 +20,10 @@ client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 def index():
     return send_from_directory(app.static_folder, 'index.html')
 
+@app.route('/<path:path>')
+def serve_static(path):
+    return send_from_directory(app.static_folder, path)
+
 @app.route('/api/projects')
 def get_projects():
     # Group projects by category
