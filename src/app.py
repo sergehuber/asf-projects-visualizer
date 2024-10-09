@@ -32,6 +32,7 @@ def get_projects():
         # Simplify similar_projects to only include names
         project_copy = project.copy()
         project_copy['similar_projects'] = [sp['name'] for sp in project.get('similar_projects', [])]
+        project_copy['features'] = project.get('features', project.get('extracted_features', []))
         
         projects_by_category[category].append(project_copy)
     
@@ -177,7 +178,7 @@ def compare_projects():
                 "name": p['name'],
                 "shortdesc": p['shortdesc'],
                 "category": p.get('category', 'Unknown'),
-                "features": p.get('features', [])
+                "features": p.get('features', p.get('extracted_features', []))
             } for p in projects
         ]
     }
