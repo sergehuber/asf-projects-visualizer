@@ -6,6 +6,8 @@ from openai import OpenAI
 import re
 import networkx as nx
 from fuzzywuzzy import process
+from llms import query_llm
+from config import LLM_PROVIDER
 
 app = Flask(__name__, static_folder='../static')
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -69,43 +71,15 @@ def filter_projects():
     # Prepare project metadata
     project_metadata = "\n".join([f"{p['name']}: {p['shortdesc']}" for p in apache_projects])
     
-    # Use OpenAI to interpret the query and find relevant projects
-    response = client.chat.completions.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": (
-                "You are an expert on Apache projects. Your task is to "
-                "interpret user queries about Apache projects and return "
-                "a list of relevant Apache project names along with brief "
-                "explanations for why each project is relevant. Also, "
-                "describe relationships between the projects and suggest "
-                "multiple possible stacks of projects. Consider all Apache projects, "
-                "including those for big data solutions like Apache Iceberg and Polaris. "
-                "Provide your response in JSON format with the following structure: "
-                "{\"projects\": {\"project_name\": {\"explanation\": \"...\", \"role\": \"...\", \"features\": [\"feature1\", \"feature2\", ...]}}, "
-                "\"relationships\": [{\"source\": \"project1\", \"target\": \"project2\", "
-                "\"description\": \"relationship_description\"}], "
-                "\"stacks\": [{\"name\": \"stack_name\", \"projects\": [\"project1\", \"project2\", ...], \"description\": \"stack_description\"}]}"
-                "Do not include any text before or after the JSON content.\n\n"
-                f"Here's a list of Apache projects with short descriptions:\n{project_metadata}"
-            )},
-            {"role": "user", "content": (
-                f"Given the query: '{query}', what Apache projects would "
-                "be most relevant, how are they related to each other, and "
-                "what would be possible stacks of these projects? Please provide "
-                "the project names, brief explanations for why each project is relevant, "
-                "its role in the stack, key features, relationships between the projects, and multiple suggested stacks."
-            )}
-        ]
-    )
-    
+    # Use configurable LLM to interpret the query and find relevant projects
+    response = query_llm(query, project_metadata)
+     
     try:
         # Extract JSON content from the response
-        content = response.choices[0].message.content
-        json_match = re.search(r'\{.*\}', content, re.DOTALL)
+        json_match = re.search(r'\{.*\}', response, re.DOTALL)
         if json_match:
             json_content = json_match.group(0)
-            ai_response = json.loads(json_content, cls=CustomJSONDecoder)
+            ai_response = json.loads(json_content)
         else:
             raise ValueError("No JSON content found in the response")
 
@@ -113,9 +87,9 @@ def filter_projects():
         relationships = ai_response.get('relationships', [])
         stacks = ai_response.get('stacks', [])
     except (json.JSONDecodeError, ValueError) as e:
-        print(f"Error parsing JSON from OpenAI response: {str(e)}")
+        print(f"Error parsing JSON from LLM response: {str(e)}")
         print("Raw response:")
-        print(content)
+        print(response)
         relevant_projects = {}
         relationships = []
         stacks = []

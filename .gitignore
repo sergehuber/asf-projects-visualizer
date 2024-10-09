@@ -14,6 +14,8 @@ __pycache__/
 
 # Project-specific files
 apache_projects.json
+apache_projects_data.txt
+cached_lm_*
 
 # Logs
 *.log
@@ -21,3 +23,6 @@ apache_projects.json
 # OS-specific files
 .DS_Store
 Thumbs.db
+
+# Model files
+gpt2-apache-projects/

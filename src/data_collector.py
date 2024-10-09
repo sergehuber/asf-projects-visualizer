@@ -1,6 +1,7 @@
 import requests
 import xml.etree.ElementTree as ET
 import json
+import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import difflib
 from urllib.parse import urljoin, urlparse
@@ -299,7 +300,36 @@ def compute_similarities(projects, top_n=5):
             for j in similar_indices if i != j
         ]
 
-def fetch_apache_projects():
+def enhance_project_data(project, llm):
+    prompt = f"""
+    Enhance the following Apache project information:
+    Name: {project['name']}
+    Short description: {project['shortdesc']}
+    Category: {project['category']}
+
+    Please provide:
+    1. An enhanced description (2-3 sentences)
+    2. A list of 3-5 key features
+    3. Suggested related Apache projects (2-3)
+    4. A refined category (if applicable)
+
+    Format the response as JSON:
+    {{
+        "enhanced_description": "...",
+        "key_features": ["feature1", "feature2", ...],
+        "related_projects": ["project1", "project2", ...],
+        "refined_category": "..."
+    }}
+    """
+    response = llm.generate_response(prompt)
+    try:
+        enhanced_data = json.loads(response)
+        project.update(enhanced_data)
+    except json.JSONDecodeError:
+        print(f"Error parsing LLM response for project {project['name']}")
+    return project
+
+def fetch_apache_projects(use_llm=False):
     projects_xml_url = "https://svn.apache.org/repos/asf/comdev/projects.apache.org/trunk/data/projects.xml"
     root = fetch_xml(projects_xml_url)
 
@@ -320,16 +350,28 @@ def fetch_apache_projects():
                     print(f"Error processing {location}: {str(e)}")
                 pbar.update(1)
 
-    # Compute similarities after all projects are fetched
+    if use_llm:
+        from llms import LocalLLM
+        llm = LocalLLM()
+        # Enhance project data using LLM
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            enhanced_projects = list(tqdm(executor.map(lambda p: enhance_project_data(p, llm), projects), total=len(projects), desc="Enhancing project data"))
+        projects = enhanced_projects
+
+    # Compute similarities after all projects are fetched and optionally enhanced
     compute_similarities(projects)
 
     return projects
 
-def main():
-    apache_projects = fetch_apache_projects()
-    with open('apache_projects.json', 'w') as f:
-        json.dump(apache_projects, f, indent=2)
-    print(f"Saved {len(apache_projects)} Apache projects to apache_projects.json")
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Collect Apache project data")
+    parser.add_argument("--use-llm", action="store_true", help="Use local LLM to enhance project data")
+    args = parser.parse_args()
 
-if __name__ == '__main__':
-    main()
+    projects = fetch_apache_projects(use_llm=args.use_llm)
+    
+    output_file = "apache_projects_enhanced.json" if args.use_llm else "apache_projects.json"
+    with open(output_file, 'w') as f:
+        json.dump(projects, f, indent=2)
+    
+    print(f"Collected data for {len(projects)} projects. Saved to {output_file}")

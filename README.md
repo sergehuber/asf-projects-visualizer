@@ -21,27 +21,51 @@ This project creates a visual map of Apache projects and allows filtering based 
    pip install -r requirements.txt
    ```
 
-4. Set up your OpenAI API key as an environment variable:
+4. Set up your OpenAI API key as an environment variable (if using OpenAI):
    ```
    export OPENAI_API_KEY=your_api_key_here
    ```
 
-5. Run the data collection script:
+5. Run the initial data collection script:
    ```
    python src/data_collector.py
    ```
 
-6. Start the Flask server:
+6. Train the local LLM using the collected data:
+   ```
+   python src/fine_tune_model.py
+   ```
+
+7. Run the enhanced data collection using the trained LLM:
+   ```
+   python src/data_collector.py --use-llm
+   ```
+
+8. Start the Flask server:
    ```
    python src/app.py
    ```
 
-7. Open `static/index.html` in a web browser.
+9. Open `http://127.0.0.1:5000` in a web browser.
 
 ## Usage
 
 Enter your requirements in the input field and click "Filter Projects" to visualize relevant Apache projects.
 
-## License
+## LLM Configuration
 
-This project is licensed under the MIT License.
+This project supports two LLM providers: OpenAI and a local LLM. You can configure which one to use by setting the `LLM_PROVIDER` environment variable.
+
+### Using OpenAI
+
+Set the `LLM_PROVIDER` environment variable to `openai`:
+
+      export LLM_PROVIDER=openai
+
+### Using Local LLM
+
+Set the `LLM_PROVIDER` environment variable to `local`:
+
+      export LLM_PROVIDER=local
+
+Make sure you have trained the local LLM before using this option.
