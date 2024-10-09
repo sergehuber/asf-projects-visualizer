@@ -121,9 +121,13 @@
             </div>
             <div class="flex items-center mb-4">
                 <button id="toggleAllCategories" class="bg-blue-500 text-white px-4 py-2 rounded mr-4">Deselect All Categories</button>
-                <div id="categoryFilters" class="flex flex-wrap gap-4"></div>
+                <div id="categoryFilters" class="flex flex-wrap gap-4 p-2"></div>
+                <div class="mt-8">
+                    <button id="openCompareModal" class="bg-blue-500 text-white px-4 py-2 rounded">Compare Projects</button>
+                </div>
             </div>
         </div>
+
 
         <div id="defaultView">
             <div id="visualization"></div>
@@ -142,6 +146,9 @@
                 <button id="closeModal" class="text-2xl">&times;</button>
             </div>
             <div id="projectDetails"></div>
+            <div class="mt-4">
+                <button id="compareFromDetails" class="bg-blue-500 text-white px-4 py-2 rounded">Compare This Project</button>
+            </div>
         </div>
     </div>
 
@@ -154,10 +161,17 @@
     <div id="comparisonModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
         <div class="bg-white p-8 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div class="flex justify-between items-center mb-4">
-                <h2 class="text-2xl font-bold">Project Comparison</h2>
+                <h2 id="project-comparison" class="text-2xl font-bold">Project Comparison</h2>
                 <button id="closeComparisonModal" class="text-2xl">&times;</button>
             </div>
-            <div id="comparisonDetails" class="grid grid-cols-2 gap-4"></div>
+            <div id="comparisonInputs" class="mb-4">
+                <input type="text" id="compareProject1" placeholder="Project 1" class="border p-2 rounded w-full mb-2">
+                <input type="text" id="compareProject2" placeholder="Project 2" class="border p-2 rounded w-full mb-2">
+                <input type="text" id="compareProject3" placeholder="Project 3 (optional)" class="border p-2 rounded w-full mb-2">
+                <input type="text" id="compareProject4" placeholder="Project 4 (optional)" class="border p-2 rounded w-full mb-2">
+                <button id="compareBtn" class="bg-blue-500 text-white px-4 py-2 rounded">Compare</button>
+            </div>
+            <div id="comparisonDetails" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
         </div>
     </div>
 
@@ -296,6 +310,7 @@
                     <div class="flex-grow">
                         <h3 class="text-base font-semibold mb-1">${project.name}</h3>
                         <p class="text-xs text-gray-600 mb-1">${project.shortdesc}</p>
+                        ${project.role ? `<p class="text-xs text-gray-500"><strong>Role in Stack:</strong> ${project.role}</p>` : ''}
                         <p class="text-xs text-gray-500"><strong>Reason:</strong> ${project.filter_explanation}</p>
                         <p class="text-xs text-gray-500 mt-2"><strong>Similar Projects:</strong> ${project.similar_projects.join(', ') || 'None'}</p>
                     </div>
@@ -308,7 +323,6 @@
                         ${project.logo ? `<img src="${project.logo}" alt="${project.name} logo" class="w-full h-full object-contain">` : logoPlaceholder}
                     </div>
                     <div class="project-name">${project.name}</div>
-                    <div class="similar-projects text-xs text-gray-500">${project.similar_projects.slice(0, 2).join(', ')}</div>
                 `;
             }
             
@@ -316,7 +330,7 @@
             return card;
         }
 
-        function generateLogoPlaceholder(projectName) {
+        function generateLogoPlaceholder(projectName, size) {
             const initials = projectName
                 .split(' ')
                 .map(word => word[0])
@@ -332,9 +346,9 @@
             const bgColor = colors[colorIndex];
 
             return `
-                <svg width="80" height="80" xmlns="http://www.w3.org/2000/svg">
-                    <rect width="80" height="80" fill="${bgColor}" />
-                    <text x="40" y="40" font-family="Arial, sans-serif" font-size="32" fill="#000000" text-anchor="middle" dominant-baseline="central">${initials}</text>
+                <svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="${size}" height="${size}" fill="${bgColor}" />
+                    <text x="${size/2}" y="${size/2}" font-family="Arial, sans-serif" font-size="${size/2}" fill="#000000" text-anchor="middle" dominant-baseline="central">${initials}</text>
                 </svg>
             `;
         }
@@ -351,6 +365,7 @@
                         filteredView.classList.remove('hidden');
                         categoryFilters.classList.add('hidden');
                         document.getElementById('toggleAllCategories').classList.add('hidden');
+                        document.getElementById('searchInput').classList.add('hidden');
                         hideLoading();
                     })
                     .catch(error => {
@@ -403,6 +418,7 @@
             filteredView.classList.add('hidden');
             categoryFilters.classList.remove('hidden');
             document.getElementById('toggleAllCategories').classList.remove('hidden');
+            document.getElementById('searchInput').classList.remove('hidden');
             suggestedStacks.innerHTML = '';
         }
 
@@ -436,22 +452,8 @@
                 <p class="mt-2"><strong>Similar Projects:</strong> ${project.similar_projects.join(', ') || 'None'}</p>
                 ${project.homepage ? `<p><strong>Homepage:</strong> <a href="${project.homepage}" target="_blank" class="text-blue-500">${project.homepage}</a></p>` : ''}
                 ${project.download_page ? `<p><strong>Download Page:</strong> <a href="${project.download_page}" target="_blank" class="text-blue-500">${project.download_page}</a></p>` : ''}
-                <div class="mt-4">
-                    <button id="compareButton" class="bg-blue-500 text-white px-4 py-2 rounded">Compare with another project</button>
-                </div>
             `;
-            document.getElementById('compareButton').addEventListener('click', () => initiateComparison(project.name));
             projectModal.classList.remove('hidden');
-        }
-
-        function initiateComparison(projectName) {
-            projectModal.classList.add('hidden');
-            const otherProject = prompt("Enter the name of the project you want to compare with:");
-            if (otherProject) {
-                compareProjects(projectName, otherProject);
-            } else {
-                projectModal.classList.remove('hidden');
-            }
         }
 
         function compareProjects(project1, project2) {
@@ -487,8 +489,20 @@
                 .catch(error => console.error('Error comparing projects:', error));
         }
 
-        document.getElementById('closeComparisonModal').addEventListener('click', () => {
+        // Add new JavaScript for project comparison
+        document.getElementById('openCompareModal').addEventListener('click', function() {
+            document.getElementById('comparisonModal').classList.remove('hidden');
+        });
+
+        document.getElementById('closeComparisonModal').addEventListener('click', function() {
             document.getElementById('comparisonModal').classList.add('hidden');
+        });
+
+        document.getElementById('compareFromDetails').addEventListener('click', function() {
+            const projectName = document.getElementById('modalTitle').textContent;
+            document.getElementById('compareProject1').value = projectName;
+            document.getElementById('projectModal').classList.add('hidden');
+            document.getElementById('comparisonModal').classList.remove('hidden');
         });
 
         function filterProjectsByName() {
@@ -510,6 +524,81 @@
                 section.style.display = visibleProjects.length > 0 ? 'block' : 'none';
             });
         }
+
+        // Add autocomplete functionality
+        function setupAutocomplete(inputId) {
+            const input = document.getElementById(inputId);
+            let timeout = null;
+
+            input.addEventListener('input', function() {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => {
+                    const query = this.value;
+                    if (query.length > 1) {
+                        fetch(`/api/project_names?query=${encodeURIComponent(query)}`)
+                            .then(response => response.json())
+                            .then(projectNames => {
+                                // Create and show autocomplete suggestions
+                                const datalist = document.createElement('datalist');
+                                datalist.id = `${inputId}-list`;
+                                projectNames.forEach(name => {
+                                    const option = document.createElement('option');
+                                    option.value = name;
+                                    datalist.appendChild(option);
+                                });
+                                document.body.appendChild(datalist);
+                                input.setAttribute('list', `${inputId}-list`);
+                            });
+                    }
+                }, 300);
+            });
+        }
+
+        setupAutocomplete('compareProject1');
+        setupAutocomplete('compareProject2');
+        setupAutocomplete('compareProject3');
+        setupAutocomplete('compareProject4');
+
+        // Comparison functionality
+        document.getElementById('compareBtn').addEventListener('click', function() {
+            const projects = [
+                document.getElementById('compareProject1').value,
+                document.getElementById('compareProject2').value,
+                document.getElementById('compareProject3').value,
+                document.getElementById('compareProject4').value
+            ].filter(Boolean);
+
+            if (projects.length < 2) {
+                alert('Please select at least two projects to compare.');
+                return;
+            }
+
+            fetch(`/api/compare?${projects.map(p => `projects=${encodeURIComponent(p)}`).join('&')}`)
+                .then(response => response.json())
+                .then(data => {
+                    const comparisonDetails = document.getElementById('comparisonDetails');
+                    comparisonDetails.innerHTML = '';
+
+                    data.projects.forEach(project => {
+                        const projectDiv = document.createElement('div');
+                        projectDiv.className = 'bg-gray-100 p-4 rounded';
+                        projectDiv.innerHTML = `
+                            <h3 class="text-xl font-bold mb-2">${project.name}</h3>
+                            <p class="mb-2"><strong>Category:</strong> ${project.category}</p>
+                            <p class="mb-2"><strong>Description:</strong> ${project.shortdesc}</p>
+                            <p><strong>Features:</strong></p>
+                            <ul class="list-disc pl-5">
+                                ${project.features.map(feature => `<li>${feature}</li>`).join('')}
+                            </ul>
+                        `;
+                        comparisonDetails.appendChild(projectDiv);
+                    });
+
+                    document.getElementById('comparisonModal').classList.remove('hidden');
+                });
+        });
+
+
     </script>
 </body>
 </html>

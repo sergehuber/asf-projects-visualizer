@@ -7,7 +7,6 @@ import re
 import networkx as nx
 from fuzzywuzzy import process
 
-
 app = Flask(__name__, static_folder='../static')
 CORS(app, resources={r"/*": {"origins": "*"}})
 
@@ -152,37 +151,35 @@ def filter_projects():
         'total_projects': len(filtered_projects)
     })
 
+@app.route('/api/project_names')
+def get_project_names():
+    query = request.args.get('query', '').lower()
+    project_names = [p['name'] for p in apache_projects if query in p['name'].lower()]
+    return jsonify(project_names)
+
 @app.route('/api/compare')
 def compare_projects():
-    project1 = request.args.get('project1')
-    project2 = request.args.get('project2')
+    project_names = request.args.getlist('projects')
     
-    if not project1 or not project2:
-        return jsonify({"error": "Two projects must be specified for comparison"}), 400
+    if len(project_names) < 2 or len(project_names) > 4:
+        return jsonify({"error": "Please specify between 2 and 4 projects for comparison"}), 400
 
-    p1 = next((p for p in apache_projects if p['name'] == project1), None)
-    p2 = next((p for p in apache_projects if p['name'] == project2), None)
-
-    if not p1 or not p2:
-        return jsonify({"error": "One or both projects not found"}), 404
-
-    # Find similarity score from pre-computed data
-    similarity_score = next((s['score'] for s in p1['similar_projects'] if s['name'] == p2['name']), 0)
+    projects = []
+    for name in project_names:
+        project = next((p for p in apache_projects if p['name'] == name), None)
+        if not project:
+            return jsonify({"error": f"Project '{name}' not found"}), 404
+        projects.append(project)
 
     comparison = {
-        "project1": {
-            "name": p1['name'],
-            "shortdesc": p1['shortdesc'],
-            "category": p1.get('category', 'Unknown'),
-            "features": p1.get('features', [])
-        },
-        "project2": {
-            "name": p2['name'],
-            "shortdesc": p2['shortdesc'],
-            "category": p2.get('category', 'Unknown'),
-            "features": p2.get('features', [])
-        },
-        "similarity_score": similarity_score
+        "projects": [
+            {
+                "name": p['name'],
+                "shortdesc": p['shortdesc'],
+                "category": p.get('category', 'Unknown'),
+                "features": p.get('features', [])
+            } for p in projects
+        ]
     }
 
     return jsonify(comparison)

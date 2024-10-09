@@ -9,6 +9,15 @@ import re
 from tqdm import tqdm
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+import nltk
+from nltk.tokenize import sent_tokenize
+from nltk.corpus import stopwords
+from collections import Counter
+
+# Download necessary NLTK data
+nltk.download('punkt')
+nltk.download('punkt_tab')
+nltk.download('stopwords')
 
 def clean_url(url):
     """Clean and correct minor errors in URLs."""
@@ -165,6 +174,47 @@ def scrape_metadata(url, project_name):
         print(f"Error scraping {url}: {str(e)}")
         return None
 
+def extract_features_from_text(text):
+    # Tokenize the text into sentences
+    sentences = sent_tokenize(text)
+    
+    # Tokenize words and remove stopwords
+    stop_words = set(stopwords.words('english'))
+    words = [word.lower() for sentence in sentences for word in nltk.word_tokenize(sentence) if word.isalnum()]
+    words = [word for word in words if word not in stop_words]
+    
+    # Count word frequencies
+    word_freq = Counter(words)
+    
+    # Extract top 10 most common words as features
+    features = [word for word, _ in word_freq.most_common(10)]
+    
+    return features
+
+def scrape_additional_info(url):
+    try:
+        response = requests.get(clean_url(url), timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Extract all text from paragraphs
+        paragraphs = soup.find_all('p')
+        full_text = ' '.join([p.get_text() for p in paragraphs])
+        
+        # Extract additional description (first 3 sentences)
+        sentences = sent_tokenize(full_text)
+        additional_description = ' '.join(sentences[:3])
+        
+        # Extract features using NLP
+        features = extract_features_from_text(full_text)
+        
+        return {
+            'additional_description': additional_description,
+            'extracted_features': features
+        }
+    except Exception as e:
+        print(f"Error scraping additional info from {url}: {str(e)}")
+        return None
+
 def fetch_and_parse_doap(location):
     try:
         response = requests.get(clean_url(location))
@@ -178,6 +228,13 @@ def fetch_and_parse_doap(location):
                         project_data['homepage_metadata'] = homepage_metadata
                         if homepage_metadata['logo']:
                             project_data['logo'] = homepage_metadata['logo']
+                    
+                    # Scrape additional info
+                    additional_info = scrape_additional_info(project_data['homepage'])
+                    if additional_info:
+                        if not project_data['description']:
+                            project_data['description'] = additional_info['additional_description']
+                        project_data['extracted_features'] = additional_info['extracted_features']
                 
                 # Scrape additional metadata from download page
                 if project_data['download_page']:
@@ -191,7 +248,7 @@ def fetch_and_parse_doap(location):
     except Exception as e:
         print(f"Error fetching or parsing DOAP from {location}: {str(e)}")
     return None
-    
+
 def compute_similarities(projects, top_n=5):
     project_descriptions = [f"{p['name']} {p['shortdesc']} {p.get('description', '')}" for p in projects]
     vectorizer = TfidfVectorizer(stop_words='english')
