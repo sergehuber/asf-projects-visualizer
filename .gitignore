@@ -13,7 +13,7 @@ __pycache__/
 .idea/
 
 # Project-specific files
-apache_projects.json
+apache_projects*.json
 apache_projects_data.txt
 cached_lm_*
 
