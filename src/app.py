@@ -6,7 +6,7 @@ from openai import OpenAI
 import re
 import networkx as nx
 from fuzzywuzzy import process
-from llms import query_llm
+from llms import query_llm_for_projects
 
 app = Flask(__name__, static_folder='../static')
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -36,8 +36,8 @@ def get_projects():
         
         # Simplify similar_projects to only include names
         project_copy = project.copy()
-        project_copy['similar_projects'] = [sp['name'] for sp in project.get('similar_projects', [])]
-        project_copy['features'] = project.get('features', project.get('extracted_features', []))
+        project_copy['similar_projects'] = project.get('related_projects', [sp['name'] for sp in project.get('similar_projects', [])])
+        project_copy['features'] = project.get('key_features', project.get('features', project.get('extracted_features', [])))
         
         projects_by_category[category].append(project_copy)
     
@@ -71,7 +71,7 @@ def filter_projects():
     project_metadata = "\n".join([f"{p['name']}: {p['shortdesc']}" for p in apache_projects])
     
     # Use configurable LLM to interpret the query and find relevant projects
-    response = query_llm(query, project_metadata)
+    response = query_llm_for_projects(query, project_metadata)
      
     try:
         # Extract JSON content from the response
@@ -104,9 +104,9 @@ def filter_projects():
                 project_copy = project.copy()
                 project_copy['filter_explanation'] = project_info['explanation']
                 project_copy['role'] = project_info['role']
-                project_copy['features'] = project_info.get('features', [])
+                project_copy['features'] = project_info.get('key_features', project_info.get('features', []))
                 project_copy['matched_name'] = project_name  # Store the original AI-provided name
-                project_copy['similar_projects'] = [sp['name'] for sp in project_copy.get('similar_projects', [])]
+                project_copy['similar_projects'] = project_info.get('related_projects', [sp['name'] for sp in project_copy.get('similar_projects', [])])
                 filtered_projects.append(project_copy)
 
     # Create a graph of project relationships
@@ -155,7 +155,7 @@ def compare_projects():
                 "name": p['name'],
                 "shortdesc": p['shortdesc'],
                 "category": p.get('category', 'Unknown'),
-                "features": p.get('features', p.get('extracted_features', []))
+                "features": p.get('key_features', p.get('features', p.get('extracted_features', [])))
             } for p in projects
         ]
     }

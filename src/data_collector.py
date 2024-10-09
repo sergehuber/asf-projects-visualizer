@@ -16,6 +16,7 @@ from nltk.corpus import stopwords
 from nltk.tag import pos_tag
 from nltk.chunk import ne_chunk
 from collections import Counter
+from llms import query_llm
 
 # Download necessary NLTK data
 nltk.download('punkt')
@@ -333,22 +334,23 @@ def compute_similarities(projects, top_n=5):
             for j in similar_indices if i != j
         ]
 
-def enhance_project_data(project, llm):
+def enhance_project_data(project):
     prompt = f"""
-    Enhance the following Apache project information:
-    Name: {project['name']}
+    You are an expert about Apache projects.
+    Provide additional the information about this Apache project: {project['name']}
+    And here is some basic information about it:
     Short description: {project['shortdesc']}
     Category: {project['category']}
-    Additional content: {project.get('additional_content', 'No additional content available.')}
 
-    Please provide:
+    Please provide the following information in a structured format using JSON only for this
+    specific project :
     1. An enhanced description (2-3 sentences)
     2. A list of 3-5 key features
     3. Suggested related Apache projects (2-3)
     4. A refined category (if applicable)
     5. Any additional insights gained from the extra content
 
-    Format the response as JSON:
+    Format the response as JSON and never put any text before or after the JSON:
     {{
         "enhanced_description": "...",
         "key_features": ["feature1", "feature2", ...],
@@ -357,12 +359,13 @@ def enhance_project_data(project, llm):
         "additional_insights": "..."
     }}
     """
-    response = llm.generate_response(prompt)
+        
+    response = query_llm(prompt)
     try:
         enhanced_data = json.loads(response)
         project.update(enhanced_data)
     except json.JSONDecodeError:
-        print(f"Error parsing LLM response for project {project['name']}")
+        print(f"Error parsing LLM response for project {project['name']} : {response}")
     return project
 
 def fetch_apache_projects(use_llm=False):
@@ -419,12 +422,9 @@ def main():
         with open('apache_projects_raw.json', 'r') as f:
             apache_projects = json.load(f)
 
-        from llms import LocalLLM
-        llm = LocalLLM()
-
         enhanced_projects = []
         for project in tqdm(apache_projects, desc="Enhancing project data"):
-            enhanced_project = enhance_project_data(project, llm)
+            enhanced_project = enhance_project_data(project)
             enhanced_projects.append(enhanced_project)
 
         with open('apache_projects_enhanced.json', 'w') as f:
