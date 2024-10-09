@@ -10,14 +10,21 @@ from tqdm import tqdm
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import nltk
-from nltk.tokenize import sent_tokenize
+from nltk.tokenize import sent_tokenize, word_tokenize
 from nltk.corpus import stopwords
+from nltk.tag import pos_tag
+from nltk.chunk import ne_chunk
 from collections import Counter
 
 # Download necessary NLTK data
 nltk.download('punkt')
 nltk.download('punkt_tab')
 nltk.download('stopwords')
+nltk.download('averaged_perceptron_tagger')
+nltk.download('averaged_perceptron_tagger_eng')
+nltk.download('maxent_ne_chunker')
+nltk.download('maxent_ne_chunker_tab')
+nltk.download('words')
 
 def clean_url(url):
     """Clean and correct minor errors in URLs."""
@@ -178,18 +185,44 @@ def extract_features_from_text(text):
     # Tokenize the text into sentences
     sentences = sent_tokenize(text)
     
-    # Tokenize words and remove stopwords
+    # Tokenize words, remove stopwords, and perform POS tagging
     stop_words = set(stopwords.words('english'))
-    words = [word.lower() for sentence in sentences for word in nltk.word_tokenize(sentence) if word.isalnum()]
+    words = [word.lower() for sentence in sentences for word in word_tokenize(sentence) if word.isalnum()]
     words = [word for word in words if word not in stop_words]
+    pos_tags = pos_tag(words)
     
-    # Count word frequencies
-    word_freq = Counter(words)
+    # Extract noun phrases
+    def extract_noun_phrases(pos_tags):
+        grammar = r"""
+            NP: {<JJ.*>*<NN.*>+}  # Adjective(s) followed by Noun(s)
+               {<NN.*>+}          # One or more Nouns
+        """
+        chunk_parser = nltk.RegexpParser(grammar)
+        tree = chunk_parser.parse(pos_tags)
+        for subtree in tree.subtrees():
+            if subtree.label() == 'NP':
+                yield ' '.join(word for word, tag in subtree.leaves())
     
-    # Extract top 10 most common words as features
-    features = [word for word, _ in word_freq.most_common(10)]
+    noun_phrases = list(extract_noun_phrases(pos_tags))
     
-    return features
+    # Extract named entities
+    named_entities = []
+    for sentence in sentences:
+        chunks = ne_chunk(pos_tag(word_tokenize(sentence)))
+        for chunk in chunks:
+            if hasattr(chunk, 'label'):
+                named_entities.append(' '.join(c[0] for c in chunk))
+    
+    # Combine noun phrases and named entities
+    features = noun_phrases + named_entities
+    
+    # Count feature frequencies
+    feature_freq = Counter(features)
+    
+    # Extract top 10 most common features
+    top_features = [feature for feature, _ in feature_freq.most_common(10)]
+    
+    return top_features
 
 def scrape_additional_info(url):
     try:

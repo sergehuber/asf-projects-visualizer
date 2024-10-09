@@ -271,10 +271,38 @@ function showProjectDetails(project) {
             <strong>Features:</strong>
             ${project.features ? project.features.map(feature => `<span class="feature-tag">${feature}</span>`).join('') : 'No features listed'}
         </div>
-        <p class="mt-2"><strong>Similar Projects:</strong> ${project.similar_projects.join(', ') || 'None'}</p>
+        <p class="mt-2"><strong>Similar Projects:</strong></p>
+        <div class="similar-projects-list">
+            ${project.similar_projects.map(sp => `<a href="#" class="similar-project-link" data-project="${sp}">${sp}</a>`).join(', ')}
+        </div>
         ${project.homepage ? `<p><strong>Homepage:</strong> <a href="${project.homepage}" target="_blank" class="text-blue-500">${project.homepage}</a></p>` : ''}
         ${project.download_page ? `<p><strong>Download Page:</strong> <a href="${project.download_page}" target="_blank" class="text-blue-500">${project.download_page}</a></p>` : ''}
     `;
+
+    // Add click event listeners to similar project links
+    const similarProjectLinks = projectDetails.querySelectorAll('.similar-project-link');
+    similarProjectLinks.forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const similarProjectName = e.target.dataset.project;
+            let foundProject = null;
+            allProjects.forEach(category => {
+                category.projects.forEach(project => {
+                    if (project.name === similarProjectName) {
+                        foundProject = project;
+                        return; // Exit the inner loop once found
+                    }
+                });
+                if (foundProject) return; // Exit the outer loop once found
+            });
+            if (foundProject) {
+                showProjectDetails(foundProject);
+            } else {
+                console.log(`Project ${similarProjectName} not found.`);
+            }
+        });
+    });
+
     projectModal.classList.remove('hidden');
 }
 
