@@ -2,10 +2,13 @@ import requests
 import xml.etree.ElementTree as ET
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import difflib
 from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 import re
 from tqdm import tqdm
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 def clean_url(url):
     """Clean and correct minor errors in URLs."""
@@ -66,7 +69,7 @@ def parse_doap_rdf(rdf_content):
         'mailing_list': clean_url(mailing_list.attrib.get('{http://www.w3.org/1999/02/22-rdf-syntax-ns#}resource')) if mailing_list is not None else None,
     }
 
-def find_logo(soup, base_url):
+def find_logo(soup, base_url, project_name):
     # Common images to exclude
     exclude_list = [
         'maven-feather.png',
@@ -74,30 +77,63 @@ def find_logo(soup, base_url):
         'apache_logo.png',
         'feather.png',
         'apache-logo.png',
-        'apache_logo_wide.png'
+        'apache_logo_wide.png',
+        'slack-logo.svg',
+        'twitter_32_26_white.png'
     ]
 
-    # Look for common logo patterns
-    logo_patterns = [
-        ('img[src*="logo"]', 'src'),
-        ('img[alt*="logo"]', 'src'),
-        ('img[class*="logo"]', 'src'),
-        ('img[id*="logo"]', 'src'),
-        ('a[class*="logo"] img', 'src'),
+    def is_valid_logo(url):
+        return not any(exclude_img in url.lower() for exclude_img in exclude_list)
+
+    def similarity_score(s1, s2):
+        return difflib.SequenceMatcher(None, s1.lower(), s2.lower()).ratio()
+
+    # Priority order for logo search
+    logo_selectors = [
+        ('img.logo', 'src'),
         ('.logo img', 'src'),
+        ('a.logo img', 'src'),
         ('#logo img', 'src'),
+        ('img[alt*="logo"]', 'src'),
+        ('img[src*="logo"]', 'src'),
     ]
 
-    for pattern, attr in logo_patterns:
-        for logo in soup.select(pattern):
+    candidate_logos = []
+
+    for selector, attr in logo_selectors:
+        logos = soup.select(selector)
+        for logo in logos:
             if logo and logo.get(attr):
                 logo_url = urljoin(base_url, logo[attr])
-                if not any(exclude_img in logo_url.lower() for exclude_img in exclude_list):
-                    return logo_url
+                if is_valid_logo(logo_url):
+                    candidate_logos.append(logo_url)
+
+    # If no logo found with above selectors, try a more general approach
+    if not candidate_logos:
+        all_images = soup.find_all('img')
+        for img in all_images:
+            src = img.get('src')
+            alt = img.get('alt', '').lower()
+            if src and ('logo' in src.lower() or 'logo' in alt):
+                logo_url = urljoin(base_url, src)
+                if is_valid_logo(logo_url):
+                    candidate_logos.append(logo_url)
+
+    # Score candidate logos based on filename similarity to project name
+    if candidate_logos:
+        scored_logos = []
+        for logo_url in candidate_logos:
+            filename = urlparse(logo_url).path.split('/')[-1]
+            score = similarity_score(project_name, filename)
+            scored_logos.append((logo_url, score))
+        
+        # Sort by score descending and return the best match
+        scored_logos.sort(key=lambda x: x[1], reverse=True)
+        return scored_logos[0][0]
 
     return None
 
-def scrape_metadata(url):
+def scrape_metadata(url, project_name):
     try:
         response = requests.get(clean_url(url), timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -122,7 +158,7 @@ def scrape_metadata(url):
             if href and href.startswith('http'):
                 metadata['links'].append(href)
         
-        metadata['logo'] = find_logo(soup, url)
+        metadata['logo'] = find_logo(soup, url, project_name)
         
         return metadata
     except Exception as e:
@@ -137,7 +173,7 @@ def fetch_and_parse_doap(location):
             if project_data:
                 # Scrape additional metadata from homepage
                 if project_data['homepage']:
-                    homepage_metadata = scrape_metadata(project_data['homepage'])
+                    homepage_metadata = scrape_metadata(project_data['homepage'], project_data['name'])
                     if homepage_metadata:
                         project_data['homepage_metadata'] = homepage_metadata
                         if homepage_metadata['logo']:
@@ -145,7 +181,7 @@ def fetch_and_parse_doap(location):
                 
                 # Scrape additional metadata from download page
                 if project_data['download_page']:
-                    download_metadata = scrape_metadata(project_data['download_page'])
+                    download_metadata = scrape_metadata(project_data['download_page'], project_data['name'])
                     if download_metadata:
                         project_data['download_metadata'] = download_metadata
                         if not project_data.get('logo') and download_metadata['logo']:
@@ -155,6 +191,23 @@ def fetch_and_parse_doap(location):
     except Exception as e:
         print(f"Error fetching or parsing DOAP from {location}: {str(e)}")
     return None
+    
+def compute_similarities(projects, top_n=5):
+    project_descriptions = [f"{p['name']} {p['shortdesc']} {p.get('description', '')}" for p in projects]
+    vectorizer = TfidfVectorizer(stop_words='english')
+    tfidf_matrix = vectorizer.fit_transform(project_descriptions)
+    
+    similarities = cosine_similarity(tfidf_matrix)
+    
+    for i, project in enumerate(projects):
+        similar_indices = similarities[i].argsort()[-top_n-1:-1][::-1]
+        project['similar_projects'] = [
+            {
+                'name': projects[j]['name'],
+                'score': similarities[i][j]
+            }
+            for j in similar_indices if i != j
+        ]
 
 def fetch_apache_projects():
     projects_xml_url = "https://svn.apache.org/repos/asf/comdev/projects.apache.org/trunk/data/projects.xml"
@@ -176,6 +229,9 @@ def fetch_apache_projects():
                 except Exception as e:
                     print(f"Error processing {location}: {str(e)}")
                 pbar.update(1)
+
+    # Compute similarities after all projects are fetched
+    compute_similarities(projects)
 
     return projects
 

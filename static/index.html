@@ -93,7 +93,19 @@
             padding: 4px 8px;
             border-radius: 4px;
         }
-
+        .similar-projects {
+            font-size: 8px;
+            color: #4a5568;
+            margin-top: 2px;
+        }
+        .feature-tag {
+            font-size: 10px;
+            background-color: #e2e8f0;
+            padding: 2px 4px;
+            border-radius: 4px;
+            margin: 2px;
+            display: inline-block;
+        }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -136,6 +148,16 @@
     <div id="loading" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
         <div class="bg-white p-8 rounded-lg">
             <p>Querying projects...</p>
+        </div>
+    </div>
+
+    <div id="comparisonModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
+        <div class="bg-white p-8 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold">Project Comparison</h2>
+                <button id="closeComparisonModal" class="text-2xl">&times;</button>
+            </div>
+            <div id="comparisonDetails" class="grid grid-cols-2 gap-4"></div>
         </div>
     </div>
 
@@ -263,28 +285,30 @@
 
         function createProjectCard(project, categoryName, isFilteredView = false) {
             const card = document.createElement('div');
-            const logoPlaceholder = generateLogoPlaceholder(project.name);
+            const logoPlaceholder = generateLogoPlaceholder(project.name, isFilteredView ? 60 : 32);
             
             if (isFilteredView) {
                 card.className = 'filtered-project-card';
                 card.innerHTML = `
-                    <div class="w-20 h-20 mr-4 flex-shrink-0">
+                    <div class="w-16 h-16 mr-3 flex-shrink-0">
                         ${project.logo ? `<img src="${project.logo}" alt="${project.name} logo" class="w-full h-full object-contain">` : logoPlaceholder}
                     </div>
                     <div class="flex-grow">
-                        <h3 class="text-lg font-semibold mb-1">${project.name}</h3>
-                        <p class="text-sm text-gray-600 mb-2">${project.shortdesc}</p>
+                        <h3 class="text-base font-semibold mb-1">${project.name}</h3>
+                        <p class="text-xs text-gray-600 mb-1">${project.shortdesc}</p>
                         <p class="text-xs text-gray-500"><strong>Reason:</strong> ${project.filter_explanation}</p>
+                        <p class="text-xs text-gray-500 mt-2"><strong>Similar Projects:</strong> ${project.similar_projects.join(', ') || 'None'}</p>
                     </div>
                 `;
             } else {
-                card.className = 'project-card bg-white p-4 rounded shadow cursor-pointer transition-shadow hover:shadow-md';
+                card.className = 'project-card';
                 card.dataset.category = categoryName;
                 card.innerHTML = `
-                    <div class="w-20 h-20 mx-auto mb-2">
+                    <div class="w-8 h-8 mb-1">
                         ${project.logo ? `<img src="${project.logo}" alt="${project.name} logo" class="w-full h-full object-contain">` : logoPlaceholder}
                     </div>
-                    <div class="project-name text-center font-semibold">${project.name}</div>
+                    <div class="project-name">${project.name}</div>
+                    <div class="similar-projects text-xs text-gray-500">${project.similar_projects.slice(0, 2).join(', ')}</div>
                 `;
             }
             
@@ -326,6 +350,7 @@
                         defaultView.classList.add('hidden');
                         filteredView.classList.remove('hidden');
                         categoryFilters.classList.add('hidden');
+                        document.getElementById('toggleAllCategories').classList.add('hidden');
                         hideLoading();
                     })
                     .catch(error => {
@@ -334,6 +359,7 @@
                     });
             }
         }
+
 
         function renderSuggestedStacks(stacks, projects) {
             const suggestedStacksContainer = document.getElementById('suggestedStacks');
@@ -373,11 +399,11 @@
 
         function clearQuery() {
             queryInput.value = '';
-            searchInput.value = '';
             defaultView.classList.remove('hidden');
             filteredView.classList.add('hidden');
             categoryFilters.classList.remove('hidden');
-            document.getElementById('suggestedStacks').innerHTML = '';
+            document.getElementById('toggleAllCategories').classList.remove('hidden');
+            suggestedStacks.innerHTML = '';
         }
 
         function renderSuggestedStack(projects) {
@@ -390,11 +416,10 @@
 
         function showProjectDetails(project) {
             modalTitle.textContent = project.name;
-            const logoPlaceholder = generateLogoPlaceholder(project.name);
             projectDetails.innerHTML = `
                 <div class="flex items-center mb-4">
                     <div class="w-20 h-20 mr-4">
-                        ${project.logo ? `<img src="${project.logo}" alt="${project.name} logo" class="w-full h-full object-contain">` : logoPlaceholder}
+                        ${project.logo ? `<img src="${project.logo}" alt="${project.name} logo" class="w-full h-full object-contain">` : generateLogoPlaceholder(project.name, 80)}
                     </div>
                     <div>
                         <p><strong>Category:</strong> ${project.category}</p>
@@ -404,11 +429,67 @@
                 <p><strong>Description:</strong> ${project.description || project.shortdesc}</p>
                 ${project.role ? `<p><strong>Role in Stack:</strong> ${project.role}</p>` : ''}
                 ${project.filter_explanation ? `<p><strong>Reason for Selection:</strong> ${project.filter_explanation}</p>` : ''}
+                <div class="mt-2">
+                    <strong>Features:</strong>
+                    ${project.features ? project.features.map(feature => `<span class="feature-tag">${feature}</span>`).join('') : 'No features listed'}
+                </div>
+                <p class="mt-2"><strong>Similar Projects:</strong> ${project.similar_projects.join(', ') || 'None'}</p>
                 ${project.homepage ? `<p><strong>Homepage:</strong> <a href="${project.homepage}" target="_blank" class="text-blue-500">${project.homepage}</a></p>` : ''}
                 ${project.download_page ? `<p><strong>Download Page:</strong> <a href="${project.download_page}" target="_blank" class="text-blue-500">${project.download_page}</a></p>` : ''}
+                <div class="mt-4">
+                    <button id="compareButton" class="bg-blue-500 text-white px-4 py-2 rounded">Compare with another project</button>
+                </div>
             `;
+            document.getElementById('compareButton').addEventListener('click', () => initiateComparison(project.name));
             projectModal.classList.remove('hidden');
         }
+
+        function initiateComparison(projectName) {
+            projectModal.classList.add('hidden');
+            const otherProject = prompt("Enter the name of the project you want to compare with:");
+            if (otherProject) {
+                compareProjects(projectName, otherProject);
+            } else {
+                projectModal.classList.remove('hidden');
+            }
+        }
+
+        function compareProjects(project1, project2) {
+            fetch(`/api/compare?project1=${encodeURIComponent(project1)}&project2=${encodeURIComponent(project2)}`)
+                .then(response => response.json())
+                .then(data => {
+                    const comparisonDetails = document.getElementById('comparisonDetails');
+                    comparisonDetails.innerHTML = `
+                        <div>
+                            <h3 class="text-xl font-bold">${data.project1.name}</h3>
+                            <p>${data.project1.shortdesc}</p>
+                            <p><strong>Category:</strong> ${data.project1.category}</p>
+                            <div class="mt-2">
+                                <strong>Features:</strong>
+                                ${data.project1.features.map(feature => `<span class="feature-tag">${feature}</span>`).join('')}
+                            </div>
+                        </div>
+                        <div>
+                            <h3 class="text-xl font-bold">${data.project2.name}</h3>
+                            <p>${data.project2.shortdesc}</p>
+                            <p><strong>Category:</strong> ${data.project2.category}</p>
+                            <div class="mt-2">
+                                <strong>Features:</strong>
+                                ${data.project2.features.map(feature => `<span class="feature-tag">${feature}</span>`).join('')}
+                            </div>
+                        </div>
+                        <div class="col-span-2 text-center mt-4">
+                            <p><strong>Similarity Score:</strong> ${(data.similarity_score * 100).toFixed(2)}%</p>
+                        </div>
+                    `;
+                    document.getElementById('comparisonModal').classList.remove('hidden');
+                })
+                .catch(error => console.error('Error comparing projects:', error));
+        }
+
+        document.getElementById('closeComparisonModal').addEventListener('click', () => {
+            document.getElementById('comparisonModal').classList.add('hidden');
+        });
 
         function filterProjectsByName() {
             const searchTerm = searchInput.value.toLowerCase();
