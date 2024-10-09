@@ -3,7 +3,7 @@ from transformers import GPT2Tokenizer, GPT2LMHeadModel, TextDataset, DataCollat
 from transformers import Trainer, TrainingArguments
 
 # Load Apache project data
-with open('apache_projects.json', 'r') as f:
+with open('apache_projects_raw.json', 'r') as f:
     apache_projects = json.load(f)
 
 # Prepare training data
@@ -39,8 +39,10 @@ def fine_tune_model():
     train_dataset = load_dataset('apache_projects_data.txt', tokenizer)
     data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
+    output_dir = "./gpt2-apache-projects"
+
     training_args = TrainingArguments(
-        output_dir="./models/gpt2-apache-projects",
+        output_dir=output_dir,
         overwrite_output_dir=True,
         num_train_epochs=3,
         per_device_train_batch_size=4,
@@ -57,6 +59,9 @@ def fine_tune_model():
 
     trainer.train()
     trainer.save_model()
+    # Explicitly save the tokenizer
+    tokenizer.save_pretrained(output_dir)
+    print(f"Model and tokenizer saved to {output_dir}")
 
 if __name__ == "__main__":
     fine_tune_model()

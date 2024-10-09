@@ -7,13 +7,12 @@ import re
 import networkx as nx
 from fuzzywuzzy import process
 from llms import query_llm
-from config import LLM_PROVIDER
 
 app = Flask(__name__, static_folder='../static')
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Load Apache project data
-with open('apache_projects.json', 'r') as f:
+with open('apache_projects_enhanced.json', 'r') as f:
     apache_projects = json.load(f)
 
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))

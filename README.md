@@ -28,7 +28,7 @@ This project creates a visual map of Apache projects and allows filtering based 
 
 5. Run the initial data collection script:
    ```
-   python src/data_collector.py
+   python src/data_collector.py --collect
    ```
 
 6. Train the local LLM using the collected data:
@@ -38,7 +38,7 @@ This project creates a visual map of Apache projects and allows filtering based 
 
 7. Run the enhanced data collection using the trained LLM:
    ```
-   python src/data_collector.py --use-llm
+   python src/data_collector.py --enhance
    ```
 
 8. Start the Flask server:

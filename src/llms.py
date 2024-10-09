@@ -15,14 +15,38 @@ class LLMFactory:
 
 class LocalLLM:
     def __init__(self):
-        self.model = GPT2LMHeadModel.from_pretrained("./models/gpt2-apache-projects")
-        self.tokenizer = GPT2Tokenizer.from_pretrained("./models/gpt2-apache-projects")
+        self.model_name = "gpt2-xl"
+        self.tokenizer = GPT2Tokenizer.from_pretrained(self.model_name)
+        self.model = GPT2LMHeadModel.from_pretrained(self.model_name)
+        
+        # Set pad token to eos token
+        self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.model.config.pad_token_id = self.model.config.eos_token_id
 
-    def generate_response(self, prompt, max_tokens=500):
-        input_ids = self.tokenizer.encode(prompt, return_tensors="pt")
-        output = self.model.generate(input_ids, max_length=max_tokens, num_return_sequences=1, no_repeat_ngram_size=2)
-        return self.tokenizer.decode(output[0], skip_special_tokens=True)
+        # Move model to GPU if available
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.model.to(self.device)
 
+    def generate_response(self, prompt):
+        inputs = self.tokenizer.encode(prompt, return_tensors="pt", truncation=True, max_length=1600)
+        inputs = inputs.to(self.device)
+        
+        attention_mask = torch.ones(inputs.shape, dtype=torch.long, device=self.device)
+        
+        outputs = self.model.generate(
+            inputs,
+            attention_mask=attention_mask,
+            max_length=1600,
+            num_return_sequences=1,
+            no_repeat_ngram_size=2,
+            do_sample=True,
+            top_k=50,
+            top_p=0.95,
+            temperature=0.7
+        )
+
+        response = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+        return response
 class OpenAILLM:
     def __init__(self):
         self.client = OpenAI(api_key=OPENAI_API_KEY)

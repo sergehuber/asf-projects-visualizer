@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import difflib
 from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
-import re
+import os
 from tqdm import tqdm
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -249,6 +249,35 @@ def scrape_additional_info(url):
         print(f"Error scraping additional info from {url}: {str(e)}")
         return None
 
+def fetch_additional_pages(base_url, max_pages=5):
+    visited = set()
+    to_visit = [base_url]
+    additional_content = []
+
+    while to_visit and len(visited) < max_pages:
+        url = to_visit.pop(0)
+        if url in visited:
+            continue
+
+        try:
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                additional_content.append(soup.get_text())
+                visited.add(url)
+
+                # Find more links on the same domain
+                for link in soup.find_all('a', href=True):
+                    next_url = urljoin(url, link['href'])
+                    if urlparse(next_url).netloc == urlparse(base_url).netloc and next_url not in visited:
+                        to_visit.append(next_url)
+            else:
+                print(f"Failed to fetch {url}: Status code {response.status_code}")
+        except Exception as e:
+            print(f"Error fetching {url}: {str(e)}")
+
+    return ' '.join(additional_content)
+
 def fetch_and_parse_doap(location):
     try:
         response = requests.get(clean_url(location))
@@ -278,6 +307,10 @@ def fetch_and_parse_doap(location):
                         if not project_data.get('logo') and download_metadata['logo']:
                             project_data['logo'] = download_metadata['logo']
                 
+                # Fetch additional pages
+                if project_data.get('homepage'):
+                    additional_content = fetch_additional_pages(project_data['homepage'])
+                    project_data['additional_content'] = additional_content
                 return project_data
     except Exception as e:
         print(f"Error fetching or parsing DOAP from {location}: {str(e)}")
@@ -306,19 +339,22 @@ def enhance_project_data(project, llm):
     Name: {project['name']}
     Short description: {project['shortdesc']}
     Category: {project['category']}
+    Additional content: {project.get('additional_content', 'No additional content available.')}
 
     Please provide:
     1. An enhanced description (2-3 sentences)
     2. A list of 3-5 key features
     3. Suggested related Apache projects (2-3)
     4. A refined category (if applicable)
+    5. Any additional insights gained from the extra content
 
     Format the response as JSON:
     {{
         "enhanced_description": "...",
         "key_features": ["feature1", "feature2", ...],
         "related_projects": ["project1", "project2", ...],
-        "refined_category": "..."
+        "refined_category": "...",
+        "additional_insights": "..."
     }}
     """
     response = llm.generate_response(prompt)
@@ -363,15 +399,37 @@ def fetch_apache_projects(use_llm=False):
 
     return projects
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Collect Apache project data")
-    parser.add_argument("--use-llm", action="store_true", help="Use local LLM to enhance project data")
+def main():
+    parser = argparse.ArgumentParser(description="Collect and enhance Apache project data")
+    parser.add_argument("--collect", action="store_true", help="Collect initial data from Apache")
+    parser.add_argument("--enhance", action="store_true", help="Enhance data using LLM")
     args = parser.parse_args()
 
-    projects = fetch_apache_projects(use_llm=args.use_llm)
-    
-    output_file = "apache_projects_enhanced.json" if args.use_llm else "apache_projects.json"
-    with open(output_file, 'w') as f:
-        json.dump(projects, f, indent=2)
-    
-    print(f"Collected data for {len(projects)} projects. Saved to {output_file}")
+    if args.collect:
+        apache_projects = fetch_apache_projects()
+        with open('apache_projects_raw.json', 'w') as f:
+            json.dump(apache_projects, f, indent=2)
+        print(f"Collected data for {len(apache_projects)} projects. Saved to apache_projects_raw.json")
+
+    if args.enhance:
+        if not os.path.exists('apache_projects_raw.json'):
+            print("Raw data file not found. Please run with --collect first.")
+            return
+
+        with open('apache_projects_raw.json', 'r') as f:
+            apache_projects = json.load(f)
+
+        from llms import LocalLLM
+        llm = LocalLLM()
+
+        enhanced_projects = []
+        for project in tqdm(apache_projects, desc="Enhancing project data"):
+            enhanced_project = enhance_project_data(project, llm)
+            enhanced_projects.append(enhanced_project)
+
+        with open('apache_projects_enhanced.json', 'w') as f:
+            json.dump(enhanced_projects, f, indent=2)
+        print(f"Enhanced data for {len(enhanced_projects)} projects. Saved to apache_projects_enhanced.json")
+
+if __name__ == "__main__":
+    main()
