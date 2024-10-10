@@ -12,3 +12,4 @@ torch
 huggingface_hub
 networkx
 fuzzywuzzy
+accelerate
