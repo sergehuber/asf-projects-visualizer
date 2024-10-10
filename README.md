@@ -63,13 +63,15 @@ This project creates a visual map of Apache projects and allows filtering based 
 
 This project supports two LLM providers: OpenAI and a local LLM. You can configure which one to use by setting the `LLM_PROVIDER` environment variable in the `.env` file.
 
-### Using OpenAI
+### Using OpenAI (Recommended)
 
-Set the `LLM_PROVIDER` to `openai` and provide your `OPENAI_API_KEY` in the `.env` file.
+Set the `LLM_PROVIDER` to `openai` and provide your `OPENAI_API_KEY` in the `.env` file. This is currently the recommended option due to its superior performance and quality of results.
 
-### Using Local LLM
+### Using Local LLM (Experimental)
 
-Set the `LLM_PROVIDER` to `local` and specify your `LOCAL_MODEL_NAME` in the `.env` file. Make sure you have trained the local LLM before using this option.
+Set the `LLM_PROVIDER` to `local` and specify your `LOCAL_MODEL_NAME` in the `.env` file. 
+
+**Note:** The local LLM option is currently experimental and not yet as performant as the OpenAI backend. The fine-tuning process and training algorithm need further improvement to match the quality of OpenAI's models. We welcome contributions from the community to enhance the local LLM training and performance.
 
 ## Project Structure
 
@@ -82,4 +84,14 @@ Set the `LLM_PROVIDER` to `local` and specify your `LOCAL_MODEL_NAME` in the `.e
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Here are some areas where we particularly need help:
+
+1. Improving the fine-tuning process for the local LLM to enhance its performance.
+2. Developing better training algorithms for the local model to improve the quality of its outputs.
+3. Expanding the dataset used for training to cover a wider range of Apache projects and their characteristics.
+
+If you're interested in contributing to these areas or have other ideas for improvement, please feel free to submit a Pull Request or open an Issue for discussion.
+
+## License
+
+This project is licensed under the Apache License, Version 2.0. See the [LICENSE](LICENSE) file for details.
