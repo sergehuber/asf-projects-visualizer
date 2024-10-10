@@ -21,9 +21,13 @@ This project creates a visual map of Apache projects and allows filtering based 
    pip install -r requirements.txt
    ```
 
-4. Set up your OpenAI API key as an environment variable (if using OpenAI):
+4. Create a `.env` file in the root directory and add your configuration:
    ```
-   export OPENAI_API_KEY=your_api_key_here
+   LLM_PROVIDER=openai  # or 'local'
+   OPENAI_API_KEY=your_api_key_here
+   OPENAI_MODEL=gpt-4o  # or another OpenAI model
+   LOCAL_MODEL_NAME=your_local_model_name  # if using a local LLM
+   HUGGINGFACE_TOKEN=your_huggingface_token  # if using Hugging Face models
    ```
 
 5. Run the initial data collection script:
@@ -31,12 +35,12 @@ This project creates a visual map of Apache projects and allows filtering based 
    python src/data_collector.py --collect
    ```
 
-6. Train the local LLM using the collected data:
+6. (Optional) If using a local LLM, train it using the collected data:
    ```
    python src/fine_tune_model.py
    ```
 
-7. Run the enhanced data collection using the trained LLM:
+7. Run the enhanced data collection using the configured LLM:
    ```
    python src/data_collector.py --enhance
    ```
@@ -50,22 +54,32 @@ This project creates a visual map of Apache projects and allows filtering based 
 
 ## Usage
 
-Enter your requirements in the input field and click "Filter Projects" to visualize relevant Apache projects.
+- Use the dimension selector to choose how projects are grouped (category, key features, refined category, or programming language).
+- Enter your requirements in the input field and click "Query" to find relevant Apache projects.
+- Use the checkboxes to filter projects by their groupings.
+- Click on a project to view more details, including its description, features, and latest release information.
 
 ## LLM Configuration
 
-This project supports two LLM providers: OpenAI and a local LLM. You can configure which one to use by setting the `LLM_PROVIDER` environment variable.
+This project supports two LLM providers: OpenAI and a local LLM. You can configure which one to use by setting the `LLM_PROVIDER` environment variable in the `.env` file.
 
 ### Using OpenAI
 
-Set the `LLM_PROVIDER` environment variable to `openai`:
-
-      export LLM_PROVIDER=openai
+Set the `LLM_PROVIDER` to `openai` and provide your `OPENAI_API_KEY` in the `.env` file.
 
 ### Using Local LLM
 
-Set the `LLM_PROVIDER` environment variable to `local`:
+Set the `LLM_PROVIDER` to `local` and specify your `LOCAL_MODEL_NAME` in the `.env` file. Make sure you have trained the local LLM before using this option.
 
-      export LLM_PROVIDER=local
+## Project Structure
 
-Make sure you have trained the local LLM before using this option.
+- `src/data_collector.py`: Handles data collection and enhancement for Apache projects.
+- `src/app.py`: Flask server that provides API endpoints for the frontend.
+- `src/llms.py`: Contains the LLM interface for querying project information.
+- `src/config.py`: Manages configuration and environment variables.
+- `src/fine_tune_model.py`: Script for fine-tuning a local LLM (if used).
+- `static/`: Contains the frontend files (HTML, CSS, JavaScript).
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
