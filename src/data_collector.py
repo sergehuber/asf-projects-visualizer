@@ -1,6 +1,7 @@
 import requests
 import xml.etree.ElementTree as ET
 import json
+import re
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import difflib
@@ -75,6 +76,8 @@ def parse_doap_rdf(rdf_content):
     bug_database = project.find('doap:bug-database', ns)
     mailing_list = project.find('doap:mailing-list', ns)
 
+    latest_release = extract_latest_release(project, ns)
+
     return {
         'name': name.text if name is not None else 'Unknown',
         'shortdesc': shortdesc.text if shortdesc is not None else '',
@@ -85,6 +88,24 @@ def parse_doap_rdf(rdf_content):
         'download_page': clean_url(download_page.attrib.get('{http://www.w3.org/1999/02/22-rdf-syntax-ns#}resource')) if download_page is not None else None,
         'bug_database': clean_url(bug_database.attrib.get('{http://www.w3.org/1999/02/22-rdf-syntax-ns#}resource')) if bug_database is not None else None,
         'mailing_list': clean_url(mailing_list.attrib.get('{http://www.w3.org/1999/02/22-rdf-syntax-ns#}resource')) if mailing_list is not None else None,
+        'latest_release': latest_release
+    }
+
+def extract_latest_release(project, ns):
+    releases = project.findall('doap:release', ns)
+    if not releases:
+        return None
+
+    latest_release = max(releases, key=lambda r: r.find('doap:revision', ns).text if r.find('doap:revision', ns) is not None else '')
+    
+    version = latest_release.find('doap:revision', ns)
+    date = latest_release.find('doap:created', ns)
+    download_url = latest_release.find('doap:file-release', ns)
+
+    return {
+        'version': version.text if version is not None else 'Unknown',
+        'date': date.text if date is not None else 'Unknown',
+        'download_url': clean_url(download_url.attrib.get('{http://www.w3.org/1999/02/22-rdf-syntax-ns#}resource')) if download_url is not None else None
     }
 
 def find_logo(soup, base_url, project_name):
@@ -264,7 +285,11 @@ def fetch_additional_pages(base_url, max_pages=5):
             response = requests.get(url, timeout=10)
             if response.status_code == 200:
                 soup = BeautifulSoup(response.text, 'html.parser')
-                additional_content.append(soup.get_text())
+                # Extract text content
+                text_content = soup.get_text(separator=' ', strip=True)
+                # Compact all whitespace
+                compacted_content = re.sub(r'\s+', ' ', text_content).strip()
+                additional_content.append(compacted_content)
                 visited.add(url)
 
                 # Find more links on the same domain
@@ -350,7 +375,7 @@ def enhance_project_data(project):
     4. A refined category (if applicable)
     5. Any additional insights gained from the extra content
 
-    Format the response as JSON and never put any text before or after the JSON:
+    Format the response as JSON and never put any text or even quotes before or after the JSON:
     {{
         "enhanced_description": "...",
         "key_features": ["feature1", "feature2", ...],
@@ -362,6 +387,16 @@ def enhance_project_data(project):
         
     response = query_llm(prompt)
     try:
+        # Remove any leading/trailing whitespace
+        response = response.strip()
+        # Remove triple backticks and "json" if present
+        if response.startswith("```json"):
+            response = response[7:]
+        if response.endswith("```"):
+            response = response[:-3]
+        # Remove any remaining leading/trailing whitespace
+        response = response.strip()
+
         enhanced_data = json.loads(response)
         project.update(enhanced_data)
     except json.JSONDecodeError:

@@ -25,6 +25,9 @@ queryInput.addEventListener('keypress', function(e) {
 });
 searchInput.addEventListener('input', filterProjectsByName);
 
+const dimensionSelector = document.getElementById('dimensionSelector');
+dimensionSelector.addEventListener('change', loadProjects);
+
 loadProjects();
 
 function showLoading() {
@@ -42,11 +45,12 @@ toggleAllCategoriesButton.addEventListener('click', toggleAllCategories);
 
 function loadProjects() {
     showLoading();
-    fetch('/api/projects')
+    const dimension = dimensionSelector.value;
+    fetch(`/api/projects?dimension=${dimension}`)
         .then(response => response.json())
         .then(data => {
             allProjects = data.categories;
-            renderCategoryFilters(data.categories);
+            renderCategoryFilters(data.categories, data.current_dimension);
             renderProjects(data.categories);
             hideLoading();
         })
@@ -56,8 +60,9 @@ function loadProjects() {
         });
 }
 
-function renderCategoryFilters(categories) {
+function renderCategoryFilters(categories, dimension) {
     categoryFilters.innerHTML = '';
+    toggleAllCategoriesButton.textContent = `Deselect All ${dimension}s`;
     categories.forEach(category => {
         const filterDiv = document.createElement('div');
         filterDiv.className = 'flex items-center';
@@ -132,7 +137,7 @@ function createProjectCard(project, categoryName, isFilteredView = false) {
             <div class="flex-grow">
                 <h3 class="text-base font-semibold mb-1">${project.name}</h3>
                 <p class="text-xs text-gray-600 mb-1">${project.shortdesc}</p>
-                ${project.role ? `<p class="text-xs text-gray-500"><strong>Role in Stack:</strong> ${project.role}</p>` : ''}
+                ${project.role ? `<p class="text-xs text-gray-500"><strong>Role:</strong> ${project.role}</p>` : ''}
                 <p class="text-xs text-gray-500"><strong>Reason:</strong> ${project.filter_explanation}</p>
                 <p class="text-xs text-gray-500 mt-2"><strong>Similar Projects:</strong> ${project.similar_projects.join(', ') || 'None'}</p>
             </div>
@@ -188,6 +193,7 @@ function queryProjects() {
                 categoryFilters.classList.add('hidden');
                 document.getElementById('toggleAllCategories').classList.add('hidden');
                 document.getElementById('searchInput').classList.add('hidden');
+                document.getElementById('dimensionSelector').classList.add('hidden');
                 hideLoading();
             })
             .catch(error => {
@@ -241,6 +247,7 @@ function clearQuery() {
     categoryFilters.classList.remove('hidden');
     document.getElementById('toggleAllCategories').classList.remove('hidden');
     document.getElementById('searchInput').classList.remove('hidden');
+    document.getElementById('dimensionSelector').classList.remove('hidden');
     suggestedStacks.innerHTML = '';
 }
 
@@ -277,6 +284,14 @@ function showProjectDetails(project) {
         </div>
         ${project.homepage ? `<p><strong>Homepage:</strong> <a href="${project.homepage}" target="_blank" class="text-blue-500">${project.homepage}</a></p>` : ''}
         ${project.download_page ? `<p><strong>Download Page:</strong> <a href="${project.download_page}" target="_blank" class="text-blue-500">${project.download_page}</a></p>` : ''}
+        ${project.latest_release ? `
+        <div class="mt-4">
+            <h3 class="text-lg font-semibold">Latest Release</h3>
+            <p><strong>Version:</strong> ${project.latest_release.version}</p>
+            <p><strong>Date:</strong> ${project.latest_release.date}</p>
+            ${project.latest_release.download_url ? `<p><strong>Download:</strong> <a href="${project.latest_release.download_url}" target="_blank" class="text-blue-500">Download</a></p>` : ''}
+        </div>
+        ` : ''}
     `;
 
     // Add click event listeners to similar project links

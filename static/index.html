@@ -13,13 +13,19 @@
 
         <div class="mb-6">
             <div class="flex space-x-4 mb-4">
+                <select id="dimensionSelector" class="p-2 border rounded">
+                    <option value="category">Category</option>
+                    <option value="key_features">Key Features</option>
+                    <option value="refined_category">Refined Category</option>
+                    <option value="programming_language">Programming Language</option>
+                </select>
                 <input type="text" id="searchInput" placeholder="Search projects by name" class="flex-grow p-2 border rounded">
                 <input type="text" id="queryInput" placeholder="Query Projects" class="flex-grow p-2 border rounded">
                 <button id="queryButton" class="bg-blue-500 text-white px-4 py-2 rounded">Query</button>
                 <button id="clearButton" class="bg-gray-300 text-gray-700 px-4 py-2 rounded">Clear</button>
             </div>
             <div class="flex items-center mb-4">
-                <button id="toggleAllCategories" class="bg-blue-500 text-white px-4 py-2 rounded mr-4">Deselect All Categories</button>
+                <button id="toggleAllCategories" class="bg-blue-500 text-white px-4 py-2 rounded mr-4">Deselect All</button>
                 <div id="categoryFilters" class="flex flex-wrap gap-4 p-2"></div>
                 <div class="mt-8">
                     <button id="openCompareModal" class="bg-blue-500 text-white px-4 py-2 rounded">Compare Projects</button>

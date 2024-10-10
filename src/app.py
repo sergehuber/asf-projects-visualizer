@@ -27,35 +27,40 @@ def serve_static(path):
 
 @app.route('/api/projects')
 def get_projects():
-    # Group projects by category
-    projects_by_category = {}
+    dimension = request.args.get('dimension', 'category')
+    projects_by_dimension = {}
     for project in apache_projects:
-        category = project.get('category', 'Uncategorized')
-        if category not in projects_by_category:
-            projects_by_category[category] = []
-        
         # Simplify similar_projects to only include names
         project_copy = project.copy()
         project_copy['similar_projects'] = project.get('related_projects', [sp['name'] for sp in project.get('similar_projects', [])])
         project_copy['features'] = project.get('key_features', project.get('features', project.get('extracted_features', [])))
-        
-        projects_by_category[category].append(project_copy)
+        key = project_copy.get(dimension, 'Unknown')
+        if isinstance(key, list):
+            for item in key:
+                if item not in projects_by_dimension:
+                    projects_by_dimension[item] = []
+                projects_by_dimension[item].append(project_copy)
+        else:
+            if key not in projects_by_dimension:
+                projects_by_dimension[key] = []
+            projects_by_dimension[key].append(project_copy)
     
-    # Sort categories and projects within categories
     result = []
-    for category, projects in sorted(projects_by_category.items()):
+    for key, projects in sorted(projects_by_dimension.items()):
         result.append({
-            'name': category,
+            'name': key,
             'projects': sorted(projects, key=lambda x: x['name'])
         })
     
-    # Sort categories by number of projects (descending)
     result.sort(key=lambda x: len(x['projects']), reverse=True)
+    total_projects = sum(len(dimension['projects']) for dimension in result)
 
-    # Calculate total number of projects
-    total_projects = sum(len(category['projects']) for category in result)
-
-    return jsonify({"categories": result, "total_projects": total_projects})
+    return jsonify({
+        "dimensions": ["category", "key_features", "refined_category", "programming_language"],
+        "current_dimension": dimension,
+        "categories": result,
+        "total_projects": total_projects
+    })
 
 class CustomJSONDecoder(json.JSONDecoder):
     def decode(self, s):
