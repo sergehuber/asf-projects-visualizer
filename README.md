@@ -1,4 +1,4 @@
-# Apache Projects Visualizer
+# ASF Projects Visualizer
 
 This project creates a visual map of Apache projects and allows filtering based on user queries.
 
