@@ -30,27 +30,35 @@ This project creates a visual map of Apache projects and allows filtering based 
    HUGGINGFACE_TOKEN=your_huggingface_token  # if using Hugging Face models
    ```
 
-5. Run the initial data collection script:
+5. Getting your OpenAI API Key:
+   - Go to https://platform.openai.com/signup and sign up for an account if you don't have one.
+   - After logging in, navigate to https://platform.openai.com/account/api-keys
+   - Although they will recommend a new project API key, for the moment this project only works with the old secret API key
+   - Click on "Create new secret key"
+   - Copy the generated key (you won't be able to see it again)
+   - Paste this key as the value for OPENAI_API_KEY in your .env file
+
+6. Run the initial data collection script:
    ```
    python src/data_collector.py --collect
    ```
 
-6. (Optional) If using a local LLM, train it using the collected data:
+7. (Optional) If using a local LLM, train it using the collected data:
    ```
    python src/fine_tune_model.py
    ```
 
-7. Run the enhanced data collection using the configured LLM:
+8. Run the enhanced data collection using the configured LLM:
    ```
    python src/data_collector.py --enhance
    ```
 
-8. Start the Flask server:
+9. Start the Flask server:
    ```
    python src/app.py
    ```
 
-9. Open `http://127.0.0.1:5000` in a web browser.
+10. Open `http://127.0.0.1:5000` in a web browser.
 
 ## Usage
 
